@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/jibble/*.js": {
+      "includeFiles": "api/jibble/**"
+    }
+  }
+}
