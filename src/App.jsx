@@ -30,7 +30,7 @@ const formatDateTime = (date) => {
 const ALLOWED_DOMAINS = ['pocket-fund.com', 'pocketfund.org'];
 
 // ============ INITIAL DATA ============
-const DEPARTMENTS = ['Engineering', 'Design', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations', 'Product'];
+const DEPARTMENTS = ['Business Analyst', 'Marketing', 'Tech', 'HR', 'Admin', 'Finance', 'Other'];
 const TICKET_TYPES = ['Complaint', 'Suggestion', 'General Query'];
 const TICKET_CATEGORIES = ['HR', 'Payroll', 'Tech/Tools', 'Operations', 'Management', 'Work Culture', 'Other'];
 const PRIORITIES = ['Low', 'Medium', 'High'];
@@ -4651,467 +4651,39 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
   );
 }
 
-// ============ ATTENDANCE PAGE (Jibble Integration) ============
+// ============ ATTENDANCE PAGE (Coming Soon) ============
 function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
-  const [jibblePeople, setJibblePeople] = useState([]);
-  const [timesheets, setTimesheets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() };
-  });
-  const [selectedPerson, setSelectedPerson] = useState(null); // for detail panel
-  const [viewMode, setViewMode] = useState('monthly'); // 'monthly' | 'daily'
-
-  // Generate days in month
-  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-  const getFirstDayOfWeek = (year, month) => new Date(year, month, 1).getDay();
-  const daysInMonth = getDaysInMonth(currentMonth.year, currentMonth.month);
-
-  const monthLabel = new Date(currentMonth.year, currentMonth.month).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-  const dayHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-  const today = new Date();
-  const isCurrentMonth = currentMonth.year === today.getFullYear() && currentMonth.month === today.getMonth();
-
-  // Navigate months
-  const prevMonth = () => {
-    setCurrentMonth(prev => {
-      const d = new Date(prev.year, prev.month - 1);
-      return { year: d.getFullYear(), month: d.getMonth() };
-    });
-  };
-  const nextMonth = () => {
-    const next = new Date(currentMonth.year, currentMonth.month + 1);
-    if (next <= new Date()) {
-      setCurrentMonth({ year: next.getFullYear(), month: next.getMonth() });
-    }
-  };
-  const goToCurrentMonth = () => {
-    const now = new Date();
-    setCurrentMonth({ year: now.getFullYear(), month: now.getMonth() });
-  };
-
-  // Fetch Jibble people
-  const fetchPeople = async () => {
-    try {
-      const res = await fetch('/api/jibble/people');
-      if (!res.ok) throw new Error('Failed to connect to Jibble');
-      const data = await res.json();
-      setJibblePeople(data.people || []);
-      return data.people || [];
-    } catch (err) {
-      setError(err.message);
-      return [];
-    }
-  };
-
-  // Fetch timesheets for the selected month
-  const fetchTimesheets = async () => {
-    try {
-      const startDate = `${currentMonth.year}-${String(currentMonth.month + 1).padStart(2, '0')}-01`;
-      const endDate = `${currentMonth.year}-${String(currentMonth.month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
-
-      const body = { startDate, endDate, period: 'Daily' };
-
-      // Non-admin: only fetch their own
-      if (!isAdmin) {
-        const me = jibblePeople.find(p => p.email?.toLowerCase() === currentUser.email?.toLowerCase());
-        if (me) body.personIds = [me.id];
-      }
-
-      const res = await fetch('/api/jibble/timesheets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        console.error('Timesheets fetch failed:', res.status);
-        return;
-      }
-      const data = await res.json();
-      setTimesheets(data.value || data || []);
-    } catch (err) {
-      console.error('fetchTimesheets:', err);
-    }
-  };
-
-  // Initial load
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await fetchPeople();
-      setLoading(false);
-    })();
-  }, []);
-
-  // Fetch timesheets when month changes or people loaded
-  useEffect(() => {
-    if (jibblePeople.length > 0) fetchTimesheets();
-  }, [currentMonth, jibblePeople.length]);
-
-  // Helpers
-  const formatDuration = (val) => {
-    if (!val || val <= 0) return '—';
-    // Could be in seconds or hours depending on API
-    const seconds = val > 200 ? val : val * 3600; // heuristic: if <200, assume hours
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
-  };
-
-  const formatTime = (iso) => {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-  };
-
-  // Get timesheet for a person on a specific day
-  const getEntry = (personId, day) => {
-    const dateStr = `${currentMonth.year}-${String(currentMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return timesheets.find(t => {
-      const tDate = t.date ? t.date.split('T')[0] : '';
-      return tDate === dateStr && t.personId === personId;
-    });
-  };
-
-  // Get color for a day cell
-  const getDayColor = (entry, day) => {
-    const dateObj = new Date(currentMonth.year, currentMonth.month, day);
-    const dayOfWeek = dateObj.getDay();
-    const isSunday = dayOfWeek === 0;
-    const isFuture = dateObj > today;
-
-    if (isFuture) return 'bg-white border border-slate-100';
-    if (!entry) {
-      if (isSunday) return 'bg-slate-100 border border-slate-200';
-      return 'bg-slate-50 border border-slate-100'; // absent or no data
-    }
-
-    const hours = entry.payrollHours || entry.regularHours || entry.trackedHours || 0;
-    const totalHrs = hours > 200 ? hours / 3600 : hours;
-
-    if (totalHrs >= 7) return 'bg-emerald-400 border border-emerald-500'; // Full day - green
-    if (totalHrs >= 4) return 'bg-amber-400 border border-amber-500'; // Half day - orange
-    if (totalHrs > 0) return 'bg-red-400 border border-red-500'; // Partial - red
-    if (isSunday) return 'bg-slate-100 border border-slate-200';
-    return 'bg-slate-50 border border-slate-100'; // absent
-  };
-
-  // Get tooltip text
-  const getDayTooltip = (entry, day) => {
-    const dateObj = new Date(currentMonth.year, currentMonth.month, day);
-    if (dateObj > today) return '';
-    if (!entry) return 'Absent';
-    const hours = entry.payrollHours || entry.regularHours || entry.trackedHours || 0;
-    const totalHrs = hours > 200 ? hours / 3600 : hours;
-    if (totalHrs >= 7) return `Full Day (${formatDuration(hours)})`;
-    if (totalHrs >= 4) return `Half Day (${formatDuration(hours)})`;
-    if (totalHrs > 0) return `Partial (${formatDuration(hours)})`;
-    return 'Absent';
-  };
-
-  // People to display
-  const myJibble = jibblePeople.find(p => p.email?.toLowerCase() === currentUser.email?.toLowerCase());
-  const displayPeople = isAdmin ? jibblePeople : (myJibble ? [myJibble] : []);
-
-  // Stats for a person in current month
-  const getPersonStats = (personId) => {
-    const personEntries = timesheets.filter(t => t.personId === personId);
-    const totalSeconds = personEntries.reduce((sum, t) => {
-      const h = t.payrollHours || t.regularHours || t.trackedHours || 0;
-      return sum + (h > 200 ? h : h * 3600);
-    }, 0);
-    const daysWorked = personEntries.filter(t => {
-      const h = t.payrollHours || t.regularHours || t.trackedHours || 0;
-      return (h > 200 ? h / 3600 : h) > 0;
-    }).length;
-    const fullDays = personEntries.filter(t => {
-      const h = t.payrollHours || t.regularHours || t.trackedHours || 0;
-      return (h > 200 ? h / 3600 : h) >= 7;
-    }).length;
-    const avgHrs = daysWorked > 0 ? (totalSeconds / 3600) / daysWorked : 0;
-    return { totalSeconds, daysWorked, fullDays, avgHrs };
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 text-violet-600 animate-spin mx-auto mb-3" />
-          <p className="text-slate-500">Connecting to Jibble...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
-        <div className="flex items-start gap-3">
-          <AlertCircle size={24} className="text-red-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-bold text-red-900">Jibble Connection Failed</h3>
-            <p className="text-sm text-red-700 mt-1">{error}</p>
-            <button onClick={() => { setError(null); setLoading(true); fetchPeople().then(() => setLoading(false)); }} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">
-              Retry
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Attendance</h2>
-          <p className="text-sm text-slate-500 mt-1">Powered by Jibble · {jibblePeople.length} team members</p>
+    <div className="flex flex-col items-center justify-center py-20 px-6">
+      <div className="relative mb-8">
+        <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center">
+          <Clock size={40} className="text-violet-500" />
+        </div>
+        <div className="absolute -top-2 -right-2 w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center animate-bounce">
+          <Sparkles size={18} className="text-amber-500" />
         </div>
       </div>
-
-      {/* Month Navigator */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-        <div className="p-4 flex items-center justify-between border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
-              <ChevronLeft size={18} className="text-slate-500" />
-            </button>
-            <button onClick={nextMonth} disabled={isCurrentMonth} className="p-2 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30">
-              <ChevronRight size={18} className="text-slate-500" />
-            </button>
-            <h3 className="text-lg font-bold text-slate-900">{monthLabel}</h3>
-            {!isCurrentMonth && (
-              <button onClick={goToCurrentMonth} className="px-3 py-1 text-xs font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors">
-                Today
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={fetchTimesheets} className="p-2 hover:bg-slate-100 rounded-xl transition-colors" title="Refresh">
-              <RefreshCw size={16} className="text-slate-400" />
-            </button>
-          </div>
-        </div>
-
-        {/* Legend */}
-        <div className="px-4 py-2.5 bg-slate-50/50 border-b border-slate-100 flex flex-wrap gap-4">
-          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded-sm bg-emerald-400 border border-emerald-500" /> Full Day (7h+)</span>
-          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded-sm bg-amber-400 border border-amber-500" /> Half Day (4-7h)</span>
-          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded-sm bg-red-400 border border-red-500" /> Partial (&lt;4h)</span>
-          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded-sm bg-slate-100 border border-slate-200" /> Absent / Weekend</span>
-        </div>
-
-        {/* Calendar Grid for each person */}
-        <div className="divide-y divide-slate-100">
-          {displayPeople.length === 0 ? (
-            <div className="p-10 text-center">
-              <Users size={40} className="text-slate-200 mx-auto mb-3" />
-              <p className="text-slate-400 text-sm">{isAdmin ? 'No Jibble team members found' : 'Your email is not linked to Jibble'}</p>
-              {!isAdmin && <p className="text-xs text-slate-300 mt-1">Ask your admin to add {currentUser.email} in Jibble</p>}
-            </div>
-          ) : displayPeople.map(person => {
-            const stats = getPersonStats(person.id);
-            const linkedEmp = employees.find(e => e.email?.toLowerCase() === person.email?.toLowerCase());
-            const isExpanded = selectedPerson === person.id;
-
-            return (
-              <div key={person.id}>
-                {/* Person Row */}
-                <div
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/50 cursor-pointer transition-colors"
-                  onClick={() => setSelectedPerson(isExpanded ? null : person.id)}
-                >
-                  {/* Avatar */}
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                    {(person.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                  </div>
-
-                  {/* Name */}
-                  <div className="min-w-[120px] flex-shrink-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate max-w-[120px]">{person.name}</p>
-                    <p className="text-[10px] text-slate-400 truncate max-w-[120px]">{linkedEmp?.dept || ''}</p>
-                  </div>
-
-                  {/* Day cells - calendar strip */}
-                  <div className="flex gap-[3px] flex-1 overflow-x-auto scrollbar-hide">
-                    {Array.from({ length: daysInMonth }, (_, i) => {
-                      const day = i + 1;
-                      const entry = getEntry(person.id, day);
-                      const color = getDayColor(entry, day);
-                      const tooltip = getDayTooltip(entry, day);
-                      const dateObj = new Date(currentMonth.year, currentMonth.month, day);
-                      const isToday = dateObj.toDateString() === today.toDateString();
-                      return (
-                        <div key={day} className="flex flex-col items-center gap-0.5 flex-shrink-0" title={`${day} ${monthLabel.split(' ')[0]} — ${tooltip}`}>
-                          {person === displayPeople[0] && (
-                            <span className={`text-[9px] leading-none ${dateObj.getDay() === 0 ? 'text-red-400' : 'text-slate-400'} font-medium`}>
-                              {dayHeaders[dateObj.getDay()]}
-                            </span>
-                          )}
-                          <div className={`w-[22px] h-[22px] rounded-[4px] ${color} ${isToday ? 'ring-2 ring-violet-500 ring-offset-1' : ''} transition-colors`}>
-                            {isToday && <div className="w-full h-full flex items-center justify-center"><span className="text-[7px] font-bold text-white drop-shadow-sm">{day}</span></div>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Quick stats */}
-                  <div className="flex-shrink-0 text-right min-w-[60px] hidden md:block">
-                    <p className="text-sm font-bold text-slate-700">{stats.daysWorked}<span className="text-[10px] font-normal text-slate-400">d</span></p>
-                    <p className="text-[10px] text-slate-400">{stats.avgHrs.toFixed(1)}h/d</p>
-                  </div>
-
-                  <ChevronRight size={14} className={`text-slate-300 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                </div>
-
-                {/* Expanded Detail */}
-                {isExpanded && (
-                  <div className="px-4 pb-4 bg-slate-50/50">
-                    {/* Summary cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                      <div className="bg-white p-3 rounded-xl border border-slate-100 text-center">
-                        <p className="text-2xl font-bold text-emerald-600">{stats.fullDays}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Full Days</p>
-                      </div>
-                      <div className="bg-white p-3 rounded-xl border border-slate-100 text-center">
-                        <p className="text-2xl font-bold text-slate-700">{stats.daysWorked}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Days Worked</p>
-                      </div>
-                      <div className="bg-white p-3 rounded-xl border border-slate-100 text-center">
-                        <p className="text-2xl font-bold text-violet-600">{formatDuration(stats.totalSeconds)}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Total Hours</p>
-                      </div>
-                      <div className="bg-white p-3 rounded-xl border border-slate-100 text-center">
-                        <p className="text-2xl font-bold text-blue-600">{stats.avgHrs.toFixed(1)}h</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Avg per Day</p>
-                      </div>
-                    </div>
-
-                    {/* Daily breakdown table */}
-                    <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-slate-50">
-                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">Date</th>
-                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">First In</th>
-                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">Last Out</th>
-                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">Hours</th>
-                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                          {timesheets.filter(t => t.personId === person.id).sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((entry, idx) => {
-                            const hours = entry.payrollHours || entry.regularHours || entry.trackedHours || 0;
-                            const totalHrs = hours > 200 ? hours / 3600 : hours;
-                            return (
-                              <tr key={idx} className="hover:bg-slate-50/50">
-                                <td className="px-3 py-2 text-xs font-medium text-slate-700">
-                                  {entry.date ? new Date(entry.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'}
-                                </td>
-                                <td className="px-3 py-2 text-xs text-slate-500">{formatTime(entry.firstClockIn || entry.clockIn)}</td>
-                                <td className="px-3 py-2 text-xs text-slate-500">{formatTime(entry.lastClockOut || entry.clockOut)}</td>
-                                <td className="px-3 py-2">
-                                  <span className={`text-xs font-semibold ${totalHrs >= 7 ? 'text-emerald-600' : totalHrs >= 4 ? 'text-amber-600' : totalHrs > 0 ? 'text-red-500' : 'text-slate-300'}`}>
-                                    {formatDuration(hours)}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                    totalHrs >= 7 ? 'bg-emerald-50 text-emerald-700' :
-                                    totalHrs >= 4 ? 'bg-amber-50 text-amber-700' :
-                                    totalHrs > 0 ? 'bg-red-50 text-red-600' :
-                                    'bg-slate-100 text-slate-400'
-                                  }`}>
-                                    {totalHrs >= 7 ? 'Full' : totalHrs >= 4 ? 'Half' : totalHrs > 0 ? 'Partial' : 'Absent'}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                          {timesheets.filter(t => t.personId === person.id).length === 0 && (
-                            <tr><td colSpan="5" className="px-3 py-6 text-center text-xs text-slate-300">No data for this month</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Day column headers at the bottom for reference */}
-        {displayPeople.length > 0 && (
-          <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center gap-3">
-            <div className="min-w-[120px] flex-shrink-0 ml-12">
-              <span className="text-[10px] text-slate-400">Day →</span>
-            </div>
-            <div className="flex gap-[3px] flex-1 overflow-x-auto scrollbar-hide">
-              {Array.from({ length: daysInMonth }, (_, i) => (
-                <div key={i} className="w-[22px] flex-shrink-0 text-center">
-                  <span className={`text-[9px] ${new Date(currentMonth.year, currentMonth.month, i + 1).getDay() === 0 ? 'text-red-400 font-semibold' : 'text-slate-400'}`}>
-                    {i + 1}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="min-w-[60px] hidden md:block" />
-            <div className="w-[14px] flex-shrink-0" />
-          </div>
-        )}
+      <h2 className="text-2xl font-bold text-slate-900 mb-2">Attendance</h2>
+      <p className="text-lg font-semibold text-violet-600 mb-3">Coming Soon</p>
+      <p className="text-sm text-slate-500 text-center max-w-md mb-6">
+        We're building a seamless attendance tracking experience powered by Jibble integration. 
+        Track work hours, view timesheets, and manage attendance — all in one place.
+      </p>
+      <div className="flex flex-wrap justify-center gap-3 mb-8">
+        {['Time Tracking', 'Monthly Calendar', 'Jibble Sync', 'Work Hours Analytics'].map(feature => (
+          <span key={feature} className="px-3 py-1.5 bg-violet-50 text-violet-600 rounded-full text-xs font-medium border border-violet-100">
+            {feature}
+          </span>
+        ))}
       </div>
-
-      {/* Employee-only: personal monthly summary */}
-      {!isAdmin && myJibble && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-          <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <BarChart3 size={18} className="text-violet-600" /> Your {monthLabel} Summary
-          </h3>
-          {(() => {
-            const stats = getPersonStats(myJibble.id);
-            return (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 bg-emerald-50 rounded-xl">
-                  <p className="text-3xl font-bold text-emerald-600">{stats.fullDays}</p>
-                  <p className="text-xs text-slate-500 mt-1">Full Days</p>
-                </div>
-                <div className="text-center p-4 bg-slate-50 rounded-xl">
-                  <p className="text-3xl font-bold text-slate-700">{stats.daysWorked}</p>
-                  <p className="text-xs text-slate-500 mt-1">Days Worked</p>
-                </div>
-                <div className="text-center p-4 bg-violet-50 rounded-xl">
-                  <p className="text-3xl font-bold text-violet-600">{formatDuration(stats.totalSeconds)}</p>
-                  <p className="text-xs text-slate-500 mt-1">Total Hours</p>
-                </div>
-                <div className="text-center p-4 bg-blue-50 rounded-xl">
-                  <p className="text-3xl font-bold text-blue-600">{stats.avgHrs.toFixed(1)}h</p>
-                  <p className="text-xs text-slate-500 mt-1">Avg per Day</p>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-      )}
-
-      {/* Connection footer */}
-      <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
-            <Wifi size={16} className="text-violet-600" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-700">Connected to Jibble</p>
-            <p className="text-xs text-slate-400">{jibblePeople.length} members · {myJibble ? '✓ Linked' : '✗ Not linked'}</p>
-          </div>
-        </div>
+      <div className="px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3">
+        <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+        <span className="text-sm text-slate-600">Under Development — Stay Tuned!</span>
       </div>
     </div>
   );
 }
+
 
 // ============ SALARY STATUS PAGE ============
 function SalaryStatusPage({ currentUser, employees, salaryRecords, getSalaryRecord, onUpdateStatus, isAdmin }) {
@@ -5527,8 +5099,10 @@ function NewSuggestionForm({ onSubmit, onCancel }) {
 
   return (
     <div className="space-y-5">
-      <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl flex items-start gap-3">
-        <Shield size={20} className="text-teal-600 flex-shrink-0 mt-0.5" />
+      <div className="p-4 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 rounded-xl flex items-start gap-3">
+        <div className="w-9 h-9 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
+          <Shield size={18} className="text-teal-600" />
+        </div>
         <div>
           <p className="text-sm font-semibold text-teal-800">100% Anonymous</p>
           <p className="text-xs text-teal-600 mt-0.5">Your identity is never stored or shared. Admin will only see the suggestion text — not who wrote it.</p>
@@ -5543,24 +5117,24 @@ function NewSuggestionForm({ onSubmit, onCancel }) {
       )}
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
-        <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Brief summary of your suggestion" maxLength={100} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300" />
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">Title</label>
+        <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Brief summary of your suggestion" maxLength={100} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300" />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-        <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300">
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">Category</label>
+        <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300">
           {SUGGESTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Your Suggestion</label>
-        <textarea value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} placeholder="Describe your suggestion, idea, or feedback in detail..." rows={5} maxLength={2000} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 resize-none" />
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">Your Suggestion</label>
+        <textarea value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} placeholder="Describe your suggestion, idea, or feedback in detail..." rows={5} maxLength={2000} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 resize-none" />
         <p className="text-xs text-slate-400 mt-1">{form.body.length}/2000</p>
       </div>
 
       {/* Attachment */}
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Attachment <span className="text-slate-400 font-normal">(optional)</span></label>
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">Attachment <span className="text-slate-400 font-normal">(optional)</span></label>
         {form.attachment ? (
           <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
             <div className="flex items-center gap-2 min-w-0">
@@ -5571,10 +5145,10 @@ function NewSuggestionForm({ onSubmit, onCancel }) {
             <button onClick={() => setForm(f => ({ ...f, attachment: null }))} className="p-1 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500"><X size={14} /></button>
           </div>
         ) : (
-          <label className="flex items-center justify-center gap-2 p-3 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 hover:border-teal-300 transition-colors">
+          <label className="flex items-center justify-center gap-2 p-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 hover:border-teal-300 transition-colors">
             <Upload size={16} className="text-slate-400" />
-            <span className="text-sm text-slate-500">Click to attach file (max 2MB)</span>
-            <input type="file" onChange={handleFileUpload} className="hidden" accept="image/*,.pdf,.doc,.docx,.txt" />
+            <span className="text-sm text-slate-500">Click to attach a file (max 2MB)</span>
+            <input type="file" onChange={handleFileUpload} className="hidden" accept="image/*,.pdf,.doc,.docx,.txt,.xlsx,.csv" />
           </label>
         )}
       </div>
@@ -5598,6 +5172,13 @@ const SUGGESTION_STATUS_STYLES = {
   'Accepted': 'bg-emerald-50 text-emerald-700 border-emerald-200',
   'Rejected': 'bg-red-50 text-red-600 border-red-200',
 };
+const SUGGESTION_STATUS_ICONS = {
+  'New': '🆕',
+  'Acknowledged': '👀',
+  'Under Review': '🔍',
+  'Accepted': '✅',
+  'Rejected': '❌',
+};
 
 function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion, onUpdateSuggestion, onDeleteSuggestion }) {
   const [filterStatus, setFilterStatus] = useState('all');
@@ -5605,6 +5186,7 @@ function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion
   const [respondingTo, setRespondingTo] = useState(null);
   const [responseText, setResponseText] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
 
   const filtered = useMemo(() => {
     let result = [...suggestions];
@@ -5617,6 +5199,7 @@ function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion
     const updates = {};
     if (selectedStatus) updates.status = selectedStatus;
     if (responseText.trim()) updates.adminResponse = responseText.trim();
+    updates.respondedAt = Date.now();
     if (Object.keys(updates).length === 0) return;
     await onUpdateSuggestion(suggestionId, updates);
     setRespondingTo(null);
@@ -5624,8 +5207,12 @@ function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion
     setSelectedStatus('');
   };
 
+  const handleQuickAction = async (suggestionId, status) => {
+    await onUpdateSuggestion(suggestionId, { status, respondedAt: Date.now() });
+  };
+
   const statusCounts = useMemo(() => {
-    const counts = {};
+    const counts = { all: suggestions.length };
     SUGGESTION_STATUSES.forEach(s => { counts[s] = suggestions.filter(sg => sg.status === s).length; });
     return counts;
   }, [suggestions]);
@@ -5633,73 +5220,97 @@ function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="p-2 bg-teal-50 rounded-xl">
-              <MessageCircle size={20} className="text-teal-600" />
+      <div className="bg-gradient-to-r from-teal-600 to-emerald-600 rounded-2xl p-6 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
+                <MessageCircle size={22} className="text-white" />
+              </div>
+              <h3 className="text-xl font-bold">Anonymous Suggestions</h3>
             </div>
-            <h3 className="text-lg font-bold text-slate-900">Anonymous Suggestions</h3>
+            <p className="text-sm text-teal-100 ml-[52px]">
+              {isAdmin
+                ? `${suggestions.length} suggestion${suggestions.length !== 1 ? 's' : ''} from your team · Identities are never recorded`
+                : 'Share feedback, ideas, or suggestions. Your identity is never stored.'}
+            </p>
           </div>
-          <p className="text-sm text-slate-500 ml-12">
-            {isAdmin
-              ? 'Review suggestions from your team. Identities are never recorded.'
-              : 'Share feedback, ideas, or suggestions anonymously. Your identity is never stored.'}
-          </p>
-        </div>
-        {!isAdmin && (
-          <button
-            onClick={onCreateSuggestion}
-            className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors"
-          >
-            <Plus size={18} />
-            New Suggestion
-          </button>
-        )}
-      </div>
-
-      {/* Stats (Admin view) */}
-      {isAdmin && suggestions.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {SUGGESTION_STATUSES.map(s => (
-            statusCounts[s] > 0 && (
-              <button
-                key={s}
-                onClick={() => setFilterStatus(filterStatus === s ? 'all' : s)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                  filterStatus === s ? 'ring-2 ring-offset-1 ring-teal-300' : ''
-                } ${SUGGESTION_STATUS_STYLES[s]}`}
-              >
-                {s}: {statusCounts[s]}
-              </button>
-            )
-          ))}
-          {filterStatus !== 'all' && (
-            <button onClick={() => setFilterStatus('all')} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700">
-              Clear
+          {!isAdmin && (
+            <button
+              onClick={onCreateSuggestion}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white text-teal-700 rounded-xl text-sm font-bold hover:bg-teal-50 transition-colors shadow-sm"
+            >
+              <Plus size={18} />
+              New Suggestion
             </button>
           )}
         </div>
-      )}
 
-      {/* Filter by category */}
+        {/* Quick stats for admin */}
+        {isAdmin && suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-3 mt-5 ml-[52px]">
+            {SUGGESTION_STATUSES.map(s => (
+              statusCounts[s] > 0 && (
+                <button
+                  key={s}
+                  onClick={() => setFilterStatus(filterStatus === s ? 'all' : s)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    filterStatus === s
+                      ? 'bg-white text-teal-700 shadow-sm'
+                      : 'bg-white/15 text-white hover:bg-white/25'
+                  }`}
+                >
+                  {SUGGESTION_STATUS_ICONS[s]} {s}: {statusCounts[s]}
+                </button>
+              )
+            ))}
+            {filterStatus !== 'all' && (
+              <button onClick={() => setFilterStatus('all')} className="px-3 py-1.5 text-xs text-teal-200 hover:text-white font-medium">
+                ✕ Clear filter
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Category Filter */}
       {suggestions.length > 0 && (
-        <div className="flex items-center gap-2">
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-          >
-            <option value="all">All Categories</option>
-            {SUGGESTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm text-slate-500 font-medium">Filter:</span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setFilterCategory('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                filterCategory === 'all' ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              All ({statusCounts.all})
+            </button>
+            {SUGGESTION_CATEGORIES.map(c => {
+              const count = suggestions.filter(s => s.category === c).length;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={c}
+                  onClick={() => setFilterCategory(filterCategory === c ? 'all' : c)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    filterCategory === c ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {c} ({count})
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Anonymity Banner (Employees) */}
       {!isAdmin && (
         <div className="p-4 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-100 rounded-2xl flex items-start gap-3">
-          <Shield size={20} className="text-teal-600 flex-shrink-0 mt-0.5" />
+          <div className="w-9 h-9 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
+            <Shield size={18} className="text-teal-600" />
+          </div>
           <div>
             <p className="text-sm font-semibold text-teal-800">Your identity is protected</p>
             <p className="text-xs text-teal-600 mt-0.5">Suggestions are completely anonymous — your name, email, and department are never stored or visible to anyone, including admins.</p>
@@ -5709,161 +5320,212 @@ function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion
 
       {/* Suggestion List */}
       {filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
-          <EmptyState
-            icon={MessageCircle}
-            title={suggestions.length === 0 ? "No suggestions yet" : "No matching suggestions"}
-            description={isAdmin
-              ? "Suggestions from your team will appear here anonymously."
-              : "Be the first to share a suggestion, idea, or piece of feedback!"}
-            action={!isAdmin && suggestions.length === 0 && (
-              <button
-                onClick={onCreateSuggestion}
-                className="px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors"
-              >
-                Share a Suggestion
-              </button>
-            )}
-          />
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm py-16 flex flex-col items-center">
+          <div className="w-16 h-16 rounded-2xl bg-teal-50 flex items-center justify-center mb-4">
+            <MessageCircle size={28} className="text-teal-400" />
+          </div>
+          <h4 className="text-base font-bold text-slate-900 mb-1">
+            {suggestions.length === 0 ? 'No suggestions yet' : 'No matching suggestions'}
+          </h4>
+          <p className="text-sm text-slate-500 mb-5 text-center max-w-sm">
+            {isAdmin
+              ? 'Suggestions from your team will appear here anonymously.'
+              : 'Be the first to share a suggestion, idea, or piece of feedback!'}
+          </p>
+          {!isAdmin && suggestions.length === 0 && (
+            <button
+              onClick={onCreateSuggestion}
+              className="px-5 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors"
+            >
+              Share a Suggestion
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
-          {filtered.map(suggestion => (
-            <div key={suggestion.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-2">
-                      <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full border ${SUGGESTION_STATUS_STYLES[suggestion.status]}`}>
-                        {suggestion.status}
-                      </span>
-                      <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">{suggestion.category}</span>
-                      <span className="text-xs text-slate-400">{formatDateTime(suggestion.createdAt)}</span>
-                    </div>
-                    <h4 className="text-base font-bold text-slate-900">{suggestion.title}</h4>
-                    <p className="text-sm text-slate-600 mt-2 whitespace-pre-wrap">{suggestion.body}</p>
-
-                    {/* Anonymous Label */}
-                    <div className="flex items-center gap-2 mt-3">
-                      <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
-                        <User size={14} className="text-slate-400" />
+          {filtered.map(suggestion => {
+            const isExpanded = expandedId === suggestion.id;
+            return (
+              <div key={suggestion.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${
+                suggestion.status === 'Accepted' ? 'border-emerald-200' :
+                suggestion.status === 'Rejected' ? 'border-red-100' :
+                'border-slate-100'
+              }`}>
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      {/* Status + Category + Time */}
+                      <div className="flex items-center gap-2 flex-wrap mb-3">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border ${SUGGESTION_STATUS_STYLES[suggestion.status]}`}>
+                          <span>{SUGGESTION_STATUS_ICONS[suggestion.status]}</span>
+                          {suggestion.status}
+                        </span>
+                        <span className="px-2.5 py-1 bg-slate-100 text-slate-600 text-xs font-medium rounded-lg">{suggestion.category}</span>
+                        <span className="text-xs text-slate-400 ml-1">{formatDateTime(suggestion.createdAt)}</span>
                       </div>
-                      <span className="text-sm text-slate-400 italic">Anonymous</span>
+
+                      {/* Title */}
+                      <h4 className="text-base font-bold text-slate-900 mb-1.5">{suggestion.title}</h4>
+
+                      {/* Body - truncated if not expanded */}
+                      <p className={`text-sm text-slate-600 whitespace-pre-wrap ${!isExpanded && suggestion.body.length > 200 ? 'line-clamp-3' : ''}`}>
+                        {suggestion.body}
+                      </p>
+                      {suggestion.body.length > 200 && (
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : suggestion.id)}
+                          className="text-xs text-teal-600 font-medium mt-1 hover:text-teal-700"
+                        >
+                          {isExpanded ? 'Show less' : 'Read more'}
+                        </button>
+                      )}
+
+                      {/* Anonymous Label */}
+                      <div className="flex items-center gap-2 mt-3">
+                        <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center">
+                          <User size={13} className="text-slate-400" />
+                        </div>
+                        <span className="text-xs text-slate-400 italic">Anonymous</span>
+                      </div>
+
+                      {/* Attachment */}
+                      {suggestion.attachment && (
+                        <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Paperclip size={14} className="text-blue-600 flex-shrink-0" />
+                            <span className="text-xs font-medium text-blue-700 truncate">{suggestion.attachment.name}</span>
+                            <span className="text-xs text-blue-500 flex-shrink-0">({(suggestion.attachment.size / 1024).toFixed(0)} KB)</span>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const win = window.open();
+                              if (win) {
+                                if (suggestion.attachment.type === 'application/pdf') {
+                                  win.document.write(`<iframe src="${suggestion.attachment.data}" style="width:100%;height:100%;border:none;"></iframe>`);
+                                } else if (suggestion.attachment.type?.startsWith('image/')) {
+                                  win.document.write(`<img src="${suggestion.attachment.data}" style="max-width:100%;height:auto;" />`);
+                                } else {
+                                  win.document.write(`<pre>${atob(suggestion.attachment.data.split(',')[1] || '')}</pre>`);
+                                }
+                                win.document.title = suggestion.attachment.name;
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center gap-1 flex-shrink-0"
+                          >
+                            <Eye size={13} /> View
+                          </button>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Attachment */}
-                    {suggestion.attachment && (
-                      <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Paperclip size={14} className="text-blue-600 flex-shrink-0" />
-                          <span className="text-xs font-medium text-blue-700 truncate">{suggestion.attachment.name}</span>
-                          <span className="text-xs text-blue-500 flex-shrink-0">({(suggestion.attachment.size / 1024).toFixed(0)} KB)</span>
-                        </div>
+                    {/* Admin Quick Actions */}
+                    {isAdmin && respondingTo !== suggestion.id && (
+                      <div className="flex flex-col gap-2 flex-shrink-0">
+                        {suggestion.status !== 'Accepted' && (
+                          <button
+                            onClick={() => handleQuickAction(suggestion.id, 'Accepted')}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-semibold hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                            title="Accept"
+                          >
+                            <CheckCircle2 size={14} /> Accept
+                          </button>
+                        )}
+                        {suggestion.status !== 'Rejected' && (
+                          <button
+                            onClick={() => handleQuickAction(suggestion.id, 'Rejected')}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-semibold hover:bg-red-100 border border-red-200 transition-colors"
+                            title="Reject"
+                          >
+                            <X size={14} /> Reject
+                          </button>
+                        )}
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const win = window.open();
-                            if (win) {
-                              if (suggestion.attachment.type === 'application/pdf') {
-                                win.document.write(`<iframe src="${suggestion.attachment.data}" style="width:100%;height:100%;border:none;"></iframe>`);
-                              } else if (suggestion.attachment.type?.startsWith('image/')) {
-                                win.document.write(`<img src="${suggestion.attachment.data}" style="max-width:100%;height:auto;" />`);
-                              } else {
-                                win.document.write(`<pre>${atob(suggestion.attachment.data.split(',')[1] || '')}</pre>`);
-                              }
-                              win.document.title = suggestion.attachment.name;
-                            }
+                          onClick={() => {
+                            setRespondingTo(suggestion.id);
+                            setResponseText(suggestion.adminResponse || '');
+                            setSelectedStatus(suggestion.status);
                           }}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center gap-1 flex-shrink-0"
+                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-100 border border-slate-200 transition-colors"
+                          title="Respond"
                         >
-                          <Eye size={13} /> View
+                          <Edit3 size={14} /> Reply
+                        </button>
+                        <button
+                          onClick={() => { if (confirm('Delete this suggestion?')) onDeleteSuggestion(suggestion.id); }}
+                          className="flex items-center gap-1.5 px-3 py-2 hover:bg-red-50 text-slate-400 rounded-xl text-xs font-medium hover:text-red-500 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={14} /> Delete
                         </button>
                       </div>
                     )}
                   </div>
 
-                  {/* Admin actions */}
-                  {isAdmin && (
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => {
-                          setRespondingTo(respondingTo === suggestion.id ? null : suggestion.id);
-                          setResponseText(suggestion.adminResponse || '');
-                          setSelectedStatus(suggestion.status);
-                        }}
-                        className={`p-2 rounded-xl transition-colors ${respondingTo === suggestion.id ? 'bg-teal-100 text-teal-700' : 'hover:bg-slate-100 text-slate-400'}`}
-                        title="Respond"
-                      >
-                        <Edit3 size={16} />
-                      </button>
-                      <button
-                        onClick={() => onDeleteSuggestion(suggestion.id)}
-                        className="p-2 hover:bg-red-50 rounded-xl text-slate-400 hover:text-red-500 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                  {/* Admin Response (if exists and not currently editing) */}
+                  {suggestion.adminResponse && respondingTo !== suggestion.id && (
+                    <div className="mt-4 p-4 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center">
+                          <Shield size={12} className="text-violet-600" />
+                        </div>
+                        <span className="text-xs font-bold text-violet-700">Admin Response</span>
+                        {suggestion.respondedAt && (
+                          <span className="text-xs text-violet-400">· {formatDateTime(suggestion.respondedAt)}</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-violet-800 whitespace-pre-wrap ml-8">{suggestion.adminResponse}</p>
+                    </div>
+                  )}
+
+                  {/* Admin Respond Form (inline) */}
+                  {isAdmin && respondingTo === suggestion.id && (
+                    <div className="mt-4 p-5 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Edit3 size={14} className="text-teal-600" />
+                        <span className="text-sm font-bold text-slate-700">Respond to Suggestion</span>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1.5">Update Status</label>
+                        <select
+                          value={selectedStatus}
+                          onChange={(e) => setSelectedStatus(e.target.value)}
+                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                        >
+                          {SUGGESTION_STATUSES.map(s => <option key={s} value={s}>{SUGGESTION_STATUS_ICONS[s]} {s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1.5">Response (visible to everyone)</label>
+                        <textarea
+                          value={responseText}
+                          onChange={(e) => setResponseText(e.target.value)}
+                          placeholder="Share your response, feedback, or action plan..."
+                          rows={3}
+                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 resize-none"
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => { setRespondingTo(null); setResponseText(''); setSelectedStatus(''); }}
+                          className="px-4 py-2.5 bg-white text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-100 border border-slate-200 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleRespond(suggestion.id)}
+                          className="px-5 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-bold hover:bg-teal-700 transition-colors flex items-center gap-1.5"
+                        >
+                          <Check size={15} />
+                          Save Response
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
-
-                {/* Admin Response (if exists) */}
-                {suggestion.adminResponse && respondingTo !== suggestion.id && (
-                  <div className="mt-4 p-4 bg-violet-50 border border-violet-100 rounded-xl">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Shield size={14} className="text-violet-600" />
-                      <span className="text-xs font-semibold text-violet-700">Admin Response</span>
-                      {suggestion.respondedAt && (
-                        <span className="text-xs text-violet-400">· {formatDateTime(suggestion.respondedAt)}</span>
-                      )}
-                    </div>
-                    <p className="text-sm text-violet-800 whitespace-pre-wrap">{suggestion.adminResponse}</p>
-                  </div>
-                )}
-
-                {/* Admin Respond Form (inline) */}
-                {isAdmin && respondingTo === suggestion.id && (
-                  <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Update Status</label>
-                      <select
-                        value={selectedStatus}
-                        onChange={(e) => setSelectedStatus(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                      >
-                        {SUGGESTION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Response (visible to everyone)</label>
-                      <textarea
-                        value={responseText}
-                        onChange={(e) => setResponseText(e.target.value)}
-                        placeholder="Share your response or update..."
-                        rows={3}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 resize-none"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setRespondingTo(null); setResponseText(''); setSelectedStatus(''); }}
-                        className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => handleRespond(suggestion.id)}
-                        className="px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center gap-1.5"
-                      >
-                        <Check size={15} />
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
