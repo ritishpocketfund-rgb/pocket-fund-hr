@@ -4654,45 +4654,51 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
 // ============ ATTENDANCE PAGE (Jibble Integration) ============
 function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
   const [jibblePeople, setJibblePeople] = useState([]);
-  const [myJibbleId, setMyJibbleId] = useState(null);
-  const [status, setStatus] = useState('unknown'); // 'clocked_in', 'on_break', 'clocked_out', 'unknown'
-  const [lastEntry, setLastEntry] = useState(null);
-  const [todayEntries, setTodayEntries] = useState([]);
   const [timesheets, setTimesheets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [dateRange, setDateRange] = useState('week');
-  const [selectedEmployee, setSelectedEmployee] = useState('all');
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [viewTab, setViewTab] = useState('today'); // 'today' | 'history'
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [selectedPerson, setSelectedPerson] = useState(null); // for detail panel
+  const [viewMode, setViewMode] = useState('monthly'); // 'monthly' | 'daily'
 
-  // Live clock
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // Generate days in month
+  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfWeek = (year, month) => new Date(year, month, 1).getDay();
+  const daysInMonth = getDaysInMonth(currentMonth.year, currentMonth.month);
 
-  const today = new Date().toISOString().split('T')[0];
+  const monthLabel = new Date(currentMonth.year, currentMonth.month).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const dayHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const today = new Date();
+  const isCurrentMonth = currentMonth.year === today.getFullYear() && currentMonth.month === today.getMonth();
 
-  const getDateRange = () => {
-    const end = new Date();
-    const start = new Date();
-    if (dateRange === 'week') start.setDate(end.getDate() - 6);
-    else if (dateRange === 'month') start.setDate(end.getDate() - 29);
-    else if (dateRange === '3months') start.setDate(end.getDate() - 89);
-    return { startDate: start.toISOString().split('T')[0], endDate: end.toISOString().split('T')[0] };
+  // Navigate months
+  const prevMonth = () => {
+    setCurrentMonth(prev => {
+      const d = new Date(prev.year, prev.month - 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  };
+  const nextMonth = () => {
+    const next = new Date(currentMonth.year, currentMonth.month + 1);
+    if (next <= new Date()) {
+      setCurrentMonth({ year: next.getFullYear(), month: next.getMonth() });
+    }
+  };
+  const goToCurrentMonth = () => {
+    const now = new Date();
+    setCurrentMonth({ year: now.getFullYear(), month: now.getMonth() });
   };
 
-  // === API CALLS ===
+  // Fetch Jibble people
   const fetchPeople = async () => {
     try {
       const res = await fetch('/api/jibble/people');
       if (!res.ok) throw new Error('Failed to connect to Jibble');
       const data = await res.json();
       setJibblePeople(data.people || []);
-      const match = (data.people || []).find(p => p.email?.toLowerCase() === currentUser.email?.toLowerCase());
-      if (match) setMyJibbleId(match.id);
       return data.people || [];
     } catch (err) {
       setError(err.message);
@@ -4700,45 +4706,18 @@ function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
     }
   };
 
-  const fetchLatest = async (people) => {
+  // Fetch timesheets for the selected month
+  const fetchTimesheets = async () => {
     try {
-      const res = await fetch(`/api/jibble/latest?date=${today}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const entries = data.value || data || [];
-      setTodayEntries(Array.isArray(entries) ? entries : []);
+      const startDate = `${currentMonth.year}-${String(currentMonth.month + 1).padStart(2, '0')}-01`;
+      const endDate = `${currentMonth.year}-${String(currentMonth.month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-      // Determine my status
-      const myMatch = people.find(p => p.email?.toLowerCase() === currentUser.email?.toLowerCase());
-      if (myMatch) {
-        const myEntry = (Array.isArray(entries) ? entries : []).find(e => e.personId === myMatch.id);
-        if (myEntry) {
-          setLastEntry(myEntry);
-          if (myEntry.type === 'Break' || myEntry.isOnBreak) {
-            setStatus('on_break');
-          } else if (myEntry.type === 'In' || (myEntry.clockIn && !myEntry.clockOut)) {
-            setStatus('clocked_in');
-          } else if (myEntry.type === 'Out' || myEntry.clockOut) {
-            setStatus('clocked_out');
-          }
-        } else {
-          setStatus('clocked_out');
-        }
-      }
-    } catch (err) {
-      console.error('fetchLatest:', err);
-    }
-  };
-
-  const fetchTimesheets = async (people) => {
-    try {
-      const { startDate, endDate } = getDateRange();
       const body = { startDate, endDate, period: 'Daily' };
-      if (!isAdmin && people.length > 0) {
-        const me = people.find(p => p.email?.toLowerCase() === currentUser.email?.toLowerCase());
+
+      // Non-admin: only fetch their own
+      if (!isAdmin) {
+        const me = jibblePeople.find(p => p.email?.toLowerCase() === currentUser.email?.toLowerCase());
         if (me) body.personIds = [me.id];
-      } else if (isAdmin && selectedEmployee !== 'all') {
-        body.personIds = [selectedEmployee];
       }
 
       const res = await fetch('/api/jibble/timesheets', {
@@ -4746,7 +4725,10 @@ function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.error('Timesheets fetch failed:', res.status);
+        return;
+      }
       const data = await res.json();
       setTimesheets(data.value || data || []);
     } catch (err) {
@@ -4754,51 +4736,25 @@ function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
     }
   };
 
-  // === ACTIONS ===
-  const doAction = async (type, label) => {
-    if (!myJibbleId) {
-      showToast('Your email is not linked to Jibble. Ask admin to verify.', 'error');
-      return;
-    }
-    setActionLoading(true);
-    try {
-      const res = await fetch('/api/jibble/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personId: myJibbleId, type }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `${label} failed`);
-      showToast(`${label} successful!`);
-      // Update status immediately
-      if (type === 'In') setStatus('clocked_in');
-      else if (type === 'Out') setStatus('clocked_out');
-      else if (type === 'Break') setStatus('on_break');
-      // Refresh entries
-      await fetchLatest(jibblePeople);
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-    setActionLoading(false);
-  };
-
-  // === LIFECYCLE ===
+  // Initial load
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const people = await fetchPeople();
-      await Promise.all([fetchLatest(people), fetchTimesheets(people)]);
+      await fetchPeople();
       setLoading(false);
     })();
   }, []);
 
+  // Fetch timesheets when month changes or people loaded
   useEffect(() => {
-    if (!loading) fetchTimesheets(jibblePeople);
-  }, [dateRange, selectedEmployee]);
+    if (jibblePeople.length > 0) fetchTimesheets();
+  }, [currentMonth, jibblePeople.length]);
 
-  // === HELPERS ===
-  const formatDuration = (seconds) => {
-    if (!seconds || seconds <= 0) return '0m';
+  // Helpers
+  const formatDuration = (val) => {
+    if (!val || val <= 0) return '—';
+    // Could be in seconds or hours depending on API
+    const seconds = val > 200 ? val : val * 3600; // heuristic: if <200, assume hours
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
@@ -4809,26 +4765,72 @@ function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
     return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
-  const getJibbleName = (personId) => jibblePeople.find(j => j.id === personId)?.name || 'Unknown';
-
-  const getStatusInfo = () => {
-    switch (status) {
-      case 'clocked_in': return { label: 'Working', color: 'emerald', icon: '🟢', bg: 'bg-emerald-50 border-emerald-200' };
-      case 'on_break': return { label: 'On Break', color: 'amber', icon: '🟡', bg: 'bg-amber-50 border-amber-200' };
-      case 'clocked_out': return { label: 'Clocked Out', color: 'slate', icon: '⚪', bg: 'bg-slate-50 border-slate-200' };
-      default: return { label: 'Unknown', color: 'slate', icon: '⚪', bg: 'bg-slate-50 border-slate-200' };
-    }
+  // Get timesheet for a person on a specific day
+  const getEntry = (personId, day) => {
+    const dateStr = `${currentMonth.year}-${String(currentMonth.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return timesheets.find(t => {
+      const tDate = t.date ? t.date.split('T')[0] : '';
+      return tDate === dateStr && t.personId === personId;
+    });
   };
 
-  // Elapsed timer since last clock-in/break
-  const getElapsed = () => {
-    if (!lastEntry?.dateTime) return null;
-    const elapsed = Math.floor((currentTime - new Date(lastEntry.dateTime)) / 1000);
-    if (elapsed < 0) return null;
-    const h = Math.floor(elapsed / 3600);
-    const m = Math.floor((elapsed % 3600) / 60);
-    const s = elapsed % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  // Get color for a day cell
+  const getDayColor = (entry, day) => {
+    const dateObj = new Date(currentMonth.year, currentMonth.month, day);
+    const dayOfWeek = dateObj.getDay();
+    const isSunday = dayOfWeek === 0;
+    const isFuture = dateObj > today;
+
+    if (isFuture) return 'bg-white border border-slate-100';
+    if (!entry) {
+      if (isSunday) return 'bg-slate-100 border border-slate-200';
+      return 'bg-slate-50 border border-slate-100'; // absent or no data
+    }
+
+    const hours = entry.payrollHours || entry.regularHours || entry.trackedHours || 0;
+    const totalHrs = hours > 200 ? hours / 3600 : hours;
+
+    if (totalHrs >= 7) return 'bg-emerald-400 border border-emerald-500'; // Full day - green
+    if (totalHrs >= 4) return 'bg-amber-400 border border-amber-500'; // Half day - orange
+    if (totalHrs > 0) return 'bg-red-400 border border-red-500'; // Partial - red
+    if (isSunday) return 'bg-slate-100 border border-slate-200';
+    return 'bg-slate-50 border border-slate-100'; // absent
+  };
+
+  // Get tooltip text
+  const getDayTooltip = (entry, day) => {
+    const dateObj = new Date(currentMonth.year, currentMonth.month, day);
+    if (dateObj > today) return '';
+    if (!entry) return 'Absent';
+    const hours = entry.payrollHours || entry.regularHours || entry.trackedHours || 0;
+    const totalHrs = hours > 200 ? hours / 3600 : hours;
+    if (totalHrs >= 7) return `Full Day (${formatDuration(hours)})`;
+    if (totalHrs >= 4) return `Half Day (${formatDuration(hours)})`;
+    if (totalHrs > 0) return `Partial (${formatDuration(hours)})`;
+    return 'Absent';
+  };
+
+  // People to display
+  const myJibble = jibblePeople.find(p => p.email?.toLowerCase() === currentUser.email?.toLowerCase());
+  const displayPeople = isAdmin ? jibblePeople : (myJibble ? [myJibble] : []);
+
+  // Stats for a person in current month
+  const getPersonStats = (personId) => {
+    const personEntries = timesheets.filter(t => t.personId === personId);
+    const totalSeconds = personEntries.reduce((sum, t) => {
+      const h = t.payrollHours || t.regularHours || t.trackedHours || 0;
+      return sum + (h > 200 ? h : h * 3600);
+    }, 0);
+    const daysWorked = personEntries.filter(t => {
+      const h = t.payrollHours || t.regularHours || t.trackedHours || 0;
+      return (h > 200 ? h / 3600 : h) > 0;
+    }).length;
+    const fullDays = personEntries.filter(t => {
+      const h = t.payrollHours || t.regularHours || t.trackedHours || 0;
+      return (h > 200 ? h / 3600 : h) >= 7;
+    }).length;
+    const avgHrs = daysWorked > 0 ? (totalSeconds / 3600) / daysWorked : 0;
+    return { totalSeconds, daysWorked, fullDays, avgHrs };
   };
 
   if (loading) {
@@ -4844,30 +4846,20 @@ function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
-          <div className="flex items-start gap-3">
-            <AlertCircle size={24} className="text-red-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-bold text-red-900">Jibble Connection Failed</h3>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
-              <p className="text-sm text-red-600 mt-3">Make sure your Jibble API credentials are set in Vercel environment variables:</p>
-              <div className="mt-2 p-3 bg-red-100 rounded-xl font-mono text-xs text-red-800">
-                JIBBLE_CLIENT_ID=your_client_id<br />
-                JIBBLE_CLIENT_SECRET=your_client_secret
-              </div>
-              <button onClick={() => { setError(null); setLoading(true); fetchPeople().then(p => { fetchLatest(p); fetchTimesheets(p); setLoading(false); }); }} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">
-                Retry Connection
-              </button>
-            </div>
+      <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+        <div className="flex items-start gap-3">
+          <AlertCircle size={24} className="text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-bold text-red-900">Jibble Connection Failed</h3>
+            <p className="text-sm text-red-700 mt-1">{error}</p>
+            <button onClick={() => { setError(null); setLoading(true); fetchPeople().then(() => setLoading(false)); }} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">
+              Retry
+            </button>
           </div>
         </div>
       </div>
     );
   }
-
-  const si = getStatusInfo();
-  const elapsed = (status === 'clocked_in' || status === 'on_break') ? getElapsed() : null;
 
   return (
     <div className="space-y-6">
@@ -4877,360 +4869,235 @@ function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
           <h2 className="text-2xl font-bold text-slate-900">Attendance</h2>
           <p className="text-sm text-slate-500 mt-1">Powered by Jibble · {jibblePeople.length} team members</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-mono tracking-wider">
-            {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
-          </div>
-        </div>
       </div>
 
-      {/* Clock In/Out/Break Card (Employee) */}
-      {!isAdmin && (
-        <div className={`rounded-2xl border-2 shadow-sm overflow-hidden transition-all ${si.bg}`}>
-          <div className="p-6">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-              {/* Status */}
-              <div className="flex items-center gap-5">
-                <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-3xl ${
-                  status === 'clocked_in' ? 'bg-emerald-100' : status === 'on_break' ? 'bg-amber-100' : 'bg-slate-100'
-                }`}>
-                  {status === 'clocked_in' ? '💼' : status === 'on_break' ? '☕' : '🏠'}
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Current Status</p>
-                  <p className={`text-3xl font-bold ${
-                    status === 'clocked_in' ? 'text-emerald-700' : status === 'on_break' ? 'text-amber-700' : 'text-slate-600'
-                  }`}>
-                    {si.label}
-                  </p>
-                  {elapsed && (
-                    <p className="text-lg font-mono text-slate-500 mt-1">{elapsed}</p>
-                  )}
-                  {lastEntry?.dateTime && (
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Since {formatTime(lastEntry.dateTime)}
-                    </p>
-                  )}
-                  {!myJibbleId && (
-                    <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
-                      <AlertTriangle size={12} /> Your email isn't linked to Jibble
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-3 min-w-[200px]">
-                {status === 'clocked_out' || status === 'unknown' ? (
-                  <button
-                    onClick={() => doAction('In', 'Clock In')}
-                    disabled={actionLoading || !myJibbleId}
-                    className="px-8 py-4 rounded-2xl text-lg font-bold bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                  >
-                    {actionLoading ? <RefreshCw size={22} className="animate-spin" /> : <><CheckCircle2 size={22} /> Clock In</>}
-                  </button>
-                ) : status === 'clocked_in' ? (
-                  <>
-                    <button
-                      onClick={() => doAction('Break', 'Start Break')}
-                      disabled={actionLoading || !myJibbleId}
-                      className="px-6 py-3 rounded-xl text-base font-bold bg-amber-400 hover:bg-amber-500 text-amber-900 shadow-lg shadow-amber-400/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      {actionLoading ? <RefreshCw size={18} className="animate-spin" /> : <><Coffee size={18} /> Start Break</>}
-                    </button>
-                    <button
-                      onClick={() => doAction('Out', 'Clock Out')}
-                      disabled={actionLoading || !myJibbleId}
-                      className="px-6 py-3 rounded-xl text-base font-bold bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      {actionLoading ? <RefreshCw size={18} className="animate-spin" /> : <><LogOut size={18} /> Clock Out</>}
-                    </button>
-                  </>
-                ) : status === 'on_break' ? (
-                  <button
-                    onClick={() => doAction('In', 'End Break')}
-                    disabled={actionLoading || !myJibbleId}
-                    className="px-8 py-4 rounded-2xl text-lg font-bold bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                  >
-                    {actionLoading ? <RefreshCw size={22} className="animate-spin" /> : <><CheckCircle2 size={22} /> End Break & Resume</>}
-                  </button>
-                ) : null}
-              </div>
-            </div>
+      {/* Month Navigator */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="p-4 flex items-center justify-between border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+              <ChevronLeft size={18} className="text-slate-500" />
+            </button>
+            <button onClick={nextMonth} disabled={isCurrentMonth} className="p-2 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-30">
+              <ChevronRight size={18} className="text-slate-500" />
+            </button>
+            <h3 className="text-lg font-bold text-slate-900">{monthLabel}</h3>
+            {!isCurrentMonth && (
+              <button onClick={goToCurrentMonth} className="px-3 py-1 text-xs font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors">
+                Today
+              </button>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Tab Switcher */}
-      <div className="flex bg-slate-100 rounded-xl p-1 w-fit">
-        {[
-          { key: 'today', label: isAdmin ? "Today's Team" : "Today's Activity" },
-          { key: 'history', label: 'Timesheet History' },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setViewTab(tab.key)}
-            className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-              viewTab === tab.key ? 'bg-white text-violet-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Today's Activity / Team View */}
-      {viewTab === 'today' && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-bold text-slate-900 flex items-center gap-2">
-              <Clock size={18} className="text-violet-600" />
-              {isAdmin ? "Today's Team Status" : "Today's Time Entries"}
-            </h3>
-            <button onClick={() => fetchLatest(jibblePeople)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors" title="Refresh">
+          <div className="flex items-center gap-2">
+            <button onClick={fetchTimesheets} className="p-2 hover:bg-slate-100 rounded-xl transition-colors" title="Refresh">
               <RefreshCw size={16} className="text-slate-400" />
             </button>
           </div>
-
-          {isAdmin ? (
-            /* Admin: Team Overview */
-            <div>
-              <div className="divide-y divide-slate-50">
-                {jibblePeople.length === 0 ? (
-                  <div className="p-8 text-center text-slate-400 text-sm">No Jibble team members found</div>
-                ) : jibblePeople.map(person => {
-                  const entry = todayEntries.find(e => e.personId === person.id);
-                  const linkedEmp = employees.find(e => e.email?.toLowerCase() === person.email?.toLowerCase());
-                  const isWorking = entry && (entry.type === 'In' || (entry.clockIn && !entry.clockOut && !entry.isOnBreak));
-                  const isBreak = entry && (entry.type === 'Break' || entry.isOnBreak);
-                  const isDone = entry && (entry.type === 'Out' || entry.clockOut);
-                  return (
-                    <div key={person.id} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50 group">
-                      <div className={`w-3 h-3 rounded-full flex-shrink-0 ${isWorking ? 'bg-emerald-500' : isBreak ? 'bg-amber-400' : isDone ? 'bg-blue-400' : 'bg-slate-300'}`} />
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                        {(person.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{person.name}</p>
-                        <p className="text-xs text-slate-400">{linkedEmp?.dept || person.email}</p>
-                      </div>
-                      <div className="text-right text-xs text-slate-500">
-                        {entry?.clockIn && <span>In: {formatTime(entry.clockIn || entry.dateTime)}</span>}
-                        {entry?.clockOut && <span className="ml-3">Out: {formatTime(entry.clockOut)}</span>}
-                      </div>
-                      <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border min-w-[70px] text-center ${
-                        isWorking ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                        isBreak ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                        isDone ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                        'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}>
-                        {isWorking ? 'Working' : isBreak ? 'Break' : isDone ? 'Done' : 'Absent'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Summary footer */}
-              <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-4">
-                <span className="text-xs text-slate-500 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Working: {todayEntries.filter(e => e.type === 'In' && !e.isOnBreak).length}</span>
-                <span className="text-xs text-slate-500 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" /> Break: {todayEntries.filter(e => e.type === 'Break' || e.isOnBreak).length}</span>
-                <span className="text-xs text-slate-500 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400" /> Done: {todayEntries.filter(e => e.type === 'Out' || e.clockOut).length}</span>
-                <span className="text-xs text-slate-500 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300" /> Absent: {Math.max(0, jibblePeople.length - todayEntries.length)}</span>
-              </div>
-            </div>
-          ) : (
-            /* Employee: Today's entries list */
-            <div>
-              {todayEntries.filter(e => e.personId === myJibbleId).length === 0 && !lastEntry ? (
-                <div className="p-10 text-center">
-                  <Clock size={40} className="text-slate-200 mx-auto mb-3" />
-                  <p className="text-slate-400 text-sm">No time entries yet today</p>
-                  <p className="text-slate-300 text-xs mt-1">Clock in to start tracking your work hours</p>
-                </div>
-              ) : (
-                <div className="p-4">
-                  {/* Simple timeline for today */}
-                  <div className="space-y-2">
-                    {todayEntries.filter(e => e.personId === myJibbleId || !myJibbleId).map((entry, idx) => (
-                      <div key={idx} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${
-                          entry.type === 'In' ? 'bg-emerald-100 text-emerald-600' :
-                          entry.type === 'Break' ? 'bg-amber-100 text-amber-600' :
-                          entry.type === 'Out' ? 'bg-red-100 text-red-600' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>
-                          {entry.type === 'In' ? '▶' : entry.type === 'Break' ? '☕' : entry.type === 'Out' ? '⏹' : '•'}
-                        </div>
-                        <div className="flex-1">
-                          <span className="text-sm font-medium text-slate-700">
-                            {entry.type === 'In' ? 'Clocked In' : entry.type === 'Break' ? 'Break Started' : entry.type === 'Out' ? 'Clocked Out' : entry.type}
-                          </span>
-                          {entry.activity && <span className="text-xs text-slate-400 ml-2">· {entry.activity}</span>}
-                        </div>
-                        <span className="text-sm font-mono text-slate-500">{formatTime(entry.dateTime || entry.clockIn)}</span>
-                      </div>
-                    ))}
-                    {/* If we only have summary data, show first-in / last-out */}
-                    {todayEntries.filter(e => e.personId === myJibbleId).length === 0 && lastEntry && (
-                      <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-50">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${
-                          status === 'clocked_in' ? 'bg-emerald-100 text-emerald-600' :
-                          status === 'on_break' ? 'bg-amber-100 text-amber-600' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>
-                          {si.icon}
-                        </div>
-                        <div className="flex-1">
-                          <span className="text-sm font-medium text-slate-700">{si.label}</span>
-                        </div>
-                        <span className="text-sm font-mono text-slate-500">{formatTime(lastEntry.dateTime)}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
-      )}
 
-      {/* Timesheet History */}
-      {viewTab === 'history' && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
-            <h3 className="font-bold text-slate-900 flex items-center gap-2">
-              <BarChart3 size={18} className="text-violet-600" /> Timesheet History
-            </h3>
-            <div className="flex items-center gap-2 flex-wrap">
-              {isAdmin && (
-                <select
-                  value={selectedEmployee}
-                  onChange={(e) => setSelectedEmployee(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+        {/* Legend */}
+        <div className="px-4 py-2.5 bg-slate-50/50 border-b border-slate-100 flex flex-wrap gap-4">
+          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded-sm bg-emerald-400 border border-emerald-500" /> Full Day (7h+)</span>
+          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded-sm bg-amber-400 border border-amber-500" /> Half Day (4-7h)</span>
+          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded-sm bg-red-400 border border-red-500" /> Partial (&lt;4h)</span>
+          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="w-3 h-3 rounded-sm bg-slate-100 border border-slate-200" /> Absent / Weekend</span>
+        </div>
+
+        {/* Calendar Grid for each person */}
+        <div className="divide-y divide-slate-100">
+          {displayPeople.length === 0 ? (
+            <div className="p-10 text-center">
+              <Users size={40} className="text-slate-200 mx-auto mb-3" />
+              <p className="text-slate-400 text-sm">{isAdmin ? 'No Jibble team members found' : 'Your email is not linked to Jibble'}</p>
+              {!isAdmin && <p className="text-xs text-slate-300 mt-1">Ask your admin to add {currentUser.email} in Jibble</p>}
+            </div>
+          ) : displayPeople.map(person => {
+            const stats = getPersonStats(person.id);
+            const linkedEmp = employees.find(e => e.email?.toLowerCase() === person.email?.toLowerCase());
+            const isExpanded = selectedPerson === person.id;
+
+            return (
+              <div key={person.id}>
+                {/* Person Row */}
+                <div
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/50 cursor-pointer transition-colors"
+                  onClick={() => setSelectedPerson(isExpanded ? null : person.id)}
                 >
-                  <option value="all">All Members</option>
-                  {jibblePeople.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              )}
-              <div className="flex bg-slate-100 rounded-xl p-0.5">
-                {[
-                  { key: 'week', label: '7 Days' },
-                  { key: 'month', label: '30 Days' },
-                  { key: '3months', label: '90 Days' },
-                ].map(opt => (
-                  <button
-                    key={opt.key}
-                    onClick={() => setDateRange(opt.key)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      dateRange === opt.key ? 'bg-white text-violet-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => fetchTimesheets(jibblePeople)} className="p-2 hover:bg-slate-100 rounded-xl" title="Refresh">
-                <RefreshCw size={16} className="text-slate-400" />
-              </button>
-            </div>
-          </div>
+                  {/* Avatar */}
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {(person.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
 
-          {timesheets.length === 0 ? (
-            <div className="p-12 text-center">
-              <Clock size={40} className="text-slate-200 mx-auto mb-3" />
-              <p className="text-slate-400 text-sm">No timesheet data for this period</p>
-              <p className="text-slate-300 text-xs mt-1">Try selecting a different date range</p>
-            </div>
-          ) : (
-            <>
-              {/* Summary Stats */}
-              {!isAdmin && timesheets.length > 0 && (
-                <div className="grid grid-cols-3 gap-4 p-5 border-b border-slate-100">
-                  <div className="text-center p-3 bg-slate-50 rounded-xl">
-                    <p className="text-2xl font-bold text-slate-800">
-                      {timesheets.filter(t => (t.payrollHours || t.regularHours || t.trackedHours || 0) > 0).length}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-0.5">Days Worked</p>
+                  {/* Name */}
+                  <div className="min-w-[120px] flex-shrink-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate max-w-[120px]">{person.name}</p>
+                    <p className="text-[10px] text-slate-400 truncate max-w-[120px]">{linkedEmp?.dept || ''}</p>
                   </div>
-                  <div className="text-center p-3 bg-emerald-50 rounded-xl">
-                    <p className="text-2xl font-bold text-emerald-700">
-                      {formatDuration(timesheets.reduce((sum, t) => sum + (t.payrollHours || t.regularHours || t.trackedHours || 0), 0))}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-0.5">Total Hours</p>
-                  </div>
-                  <div className="text-center p-3 bg-violet-50 rounded-xl">
-                    <p className="text-2xl font-bold text-violet-700">
-                      {timesheets.filter(t => (t.payrollHours || t.regularHours || t.trackedHours || 0) > 0).length > 0
-                        ? formatDuration(Math.round(timesheets.reduce((sum, t) => sum + (t.payrollHours || t.regularHours || t.trackedHours || 0), 0) / timesheets.filter(t => (t.payrollHours || t.regularHours || t.trackedHours || 0) > 0).length))
-                        : '—'
-                      }
-                    </p>
-                    <p className="text-xs text-slate-400 mt-0.5">Avg/Day</p>
-                  </div>
-                </div>
-              )}
 
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-slate-50">
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Date</th>
-                      {isAdmin && <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Name</th>}
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">First In</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Last Out</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Break</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Worked</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {timesheets.map((entry, idx) => {
-                      const worked = entry.payrollHours || entry.regularHours || entry.trackedHours || 0;
-                      const breakTime = entry.breakHours || entry.breakDuration || 0;
-                      const isFullDay = worked >= 28800;
-                      const isHalfDay = worked >= 14400 && worked < 28800;
+                  {/* Day cells - calendar strip */}
+                  <div className="flex gap-[3px] flex-1 overflow-x-auto scrollbar-hide">
+                    {Array.from({ length: daysInMonth }, (_, i) => {
+                      const day = i + 1;
+                      const entry = getEntry(person.id, day);
+                      const color = getDayColor(entry, day);
+                      const tooltip = getDayTooltip(entry, day);
+                      const dateObj = new Date(currentMonth.year, currentMonth.month, day);
+                      const isToday = dateObj.toDateString() === today.toDateString();
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/50">
-                          <td className="px-5 py-3">
-                            <p className="text-sm font-medium text-slate-800">
-                              {entry.date ? new Date(entry.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'}
-                            </p>
-                          </td>
-                          {isAdmin && (
-                            <td className="px-5 py-3 text-sm text-slate-600">{entry.personName || getJibbleName(entry.personId)}</td>
+                        <div key={day} className="flex flex-col items-center gap-0.5 flex-shrink-0" title={`${day} ${monthLabel.split(' ')[0]} — ${tooltip}`}>
+                          {person === displayPeople[0] && (
+                            <span className={`text-[9px] leading-none ${dateObj.getDay() === 0 ? 'text-red-400' : 'text-slate-400'} font-medium`}>
+                              {dayHeaders[dateObj.getDay()]}
+                            </span>
                           )}
-                          <td className="px-5 py-3 text-sm text-slate-600">{formatTime(entry.firstClockIn || entry.clockIn)}</td>
-                          <td className="px-5 py-3 text-sm text-slate-600">{formatTime(entry.lastClockOut || entry.clockOut)}</td>
-                          <td className="px-5 py-3 text-sm text-slate-400">{breakTime > 0 ? formatDuration(breakTime) : '—'}</td>
-                          <td className="px-5 py-3">
-                            <span className={`text-sm font-semibold ${isFullDay ? 'text-emerald-700' : isHalfDay ? 'text-amber-700' : worked > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
-                              {worked > 0 ? formatDuration(worked) : '—'}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3">
-                            <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${
-                              isFullDay ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                              isHalfDay ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                              worked > 0 ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                              'bg-slate-100 text-slate-400 border-slate-200'
-                            }`}>
-                              {isFullDay ? 'Full Day' : isHalfDay ? 'Half Day' : worked > 0 ? 'Partial' : 'Absent'}
-                            </span>
-                          </td>
-                        </tr>
+                          <div className={`w-[22px] h-[22px] rounded-[4px] ${color} ${isToday ? 'ring-2 ring-violet-500 ring-offset-1' : ''} transition-colors`}>
+                            {isToday && <div className="w-full h-full flex items-center justify-center"><span className="text-[7px] font-bold text-white drop-shadow-sm">{day}</span></div>}
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+
+                  {/* Quick stats */}
+                  <div className="flex-shrink-0 text-right min-w-[60px] hidden md:block">
+                    <p className="text-sm font-bold text-slate-700">{stats.daysWorked}<span className="text-[10px] font-normal text-slate-400">d</span></p>
+                    <p className="text-[10px] text-slate-400">{stats.avgHrs.toFixed(1)}h/d</p>
+                  </div>
+
+                  <ChevronRight size={14} className={`text-slate-300 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                </div>
+
+                {/* Expanded Detail */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 bg-slate-50/50">
+                    {/* Summary cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 text-center">
+                        <p className="text-2xl font-bold text-emerald-600">{stats.fullDays}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Full Days</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 text-center">
+                        <p className="text-2xl font-bold text-slate-700">{stats.daysWorked}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Days Worked</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 text-center">
+                        <p className="text-2xl font-bold text-violet-600">{formatDuration(stats.totalSeconds)}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Total Hours</p>
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 text-center">
+                        <p className="text-2xl font-bold text-blue-600">{stats.avgHrs.toFixed(1)}h</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Avg per Day</p>
+                      </div>
+                    </div>
+
+                    {/* Daily breakdown table */}
+                    <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-slate-50">
+                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">Date</th>
+                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">First In</th>
+                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">Last Out</th>
+                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">Hours</th>
+                            <th className="text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {timesheets.filter(t => t.personId === person.id).sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((entry, idx) => {
+                            const hours = entry.payrollHours || entry.regularHours || entry.trackedHours || 0;
+                            const totalHrs = hours > 200 ? hours / 3600 : hours;
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50/50">
+                                <td className="px-3 py-2 text-xs font-medium text-slate-700">
+                                  {entry.date ? new Date(entry.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-xs text-slate-500">{formatTime(entry.firstClockIn || entry.clockIn)}</td>
+                                <td className="px-3 py-2 text-xs text-slate-500">{formatTime(entry.lastClockOut || entry.clockOut)}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`text-xs font-semibold ${totalHrs >= 7 ? 'text-emerald-600' : totalHrs >= 4 ? 'text-amber-600' : totalHrs > 0 ? 'text-red-500' : 'text-slate-300'}`}>
+                                    {formatDuration(hours)}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                    totalHrs >= 7 ? 'bg-emerald-50 text-emerald-700' :
+                                    totalHrs >= 4 ? 'bg-amber-50 text-amber-700' :
+                                    totalHrs > 0 ? 'bg-red-50 text-red-600' :
+                                    'bg-slate-100 text-slate-400'
+                                  }`}>
+                                    {totalHrs >= 7 ? 'Full' : totalHrs >= 4 ? 'Half' : totalHrs > 0 ? 'Partial' : 'Absent'}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {timesheets.filter(t => t.personId === person.id).length === 0 && (
+                            <tr><td colSpan="5" className="px-3 py-6 text-center text-xs text-slate-300">No data for this month</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
-            </>
-          )}
+            );
+          })}
+        </div>
+
+        {/* Day column headers at the bottom for reference */}
+        {displayPeople.length > 0 && (
+          <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center gap-3">
+            <div className="min-w-[120px] flex-shrink-0 ml-12">
+              <span className="text-[10px] text-slate-400">Day →</span>
+            </div>
+            <div className="flex gap-[3px] flex-1 overflow-x-auto scrollbar-hide">
+              {Array.from({ length: daysInMonth }, (_, i) => (
+                <div key={i} className="w-[22px] flex-shrink-0 text-center">
+                  <span className={`text-[9px] ${new Date(currentMonth.year, currentMonth.month, i + 1).getDay() === 0 ? 'text-red-400 font-semibold' : 'text-slate-400'}`}>
+                    {i + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="min-w-[60px] hidden md:block" />
+            <div className="w-[14px] flex-shrink-0" />
+          </div>
+        )}
+      </div>
+
+      {/* Employee-only: personal monthly summary */}
+      {!isAdmin && myJibble && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <BarChart3 size={18} className="text-violet-600" /> Your {monthLabel} Summary
+          </h3>
+          {(() => {
+            const stats = getPersonStats(myJibble.id);
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-4 bg-emerald-50 rounded-xl">
+                  <p className="text-3xl font-bold text-emerald-600">{stats.fullDays}</p>
+                  <p className="text-xs text-slate-500 mt-1">Full Days</p>
+                </div>
+                <div className="text-center p-4 bg-slate-50 rounded-xl">
+                  <p className="text-3xl font-bold text-slate-700">{stats.daysWorked}</p>
+                  <p className="text-xs text-slate-500 mt-1">Days Worked</p>
+                </div>
+                <div className="text-center p-4 bg-violet-50 rounded-xl">
+                  <p className="text-3xl font-bold text-violet-600">{formatDuration(stats.totalSeconds)}</p>
+                  <p className="text-xs text-slate-500 mt-1">Total Hours</p>
+                </div>
+                <div className="text-center p-4 bg-blue-50 rounded-xl">
+                  <p className="text-3xl font-bold text-blue-600">{stats.avgHrs.toFixed(1)}h</p>
+                  <p className="text-xs text-slate-500 mt-1">Avg per Day</p>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
-      {/* Connection Status */}
+      {/* Connection footer */}
       <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
@@ -5238,14 +5105,9 @@ function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
           </div>
           <div>
             <p className="text-sm font-medium text-slate-700">Connected to Jibble</p>
-            <p className="text-xs text-slate-400">{jibblePeople.length} members · {myJibbleId ? '✓ Your account linked' : '✗ Your account not linked'}</p>
+            <p className="text-xs text-slate-400">{jibblePeople.length} members · {myJibble ? '✓ Linked' : '✗ Not linked'}</p>
           </div>
         </div>
-        {!myJibbleId && !isAdmin && (
-          <span className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">
-            Email mismatch — ask admin to add {currentUser.email} in Jibble
-          </span>
-        )}
       </div>
     </div>
   );
