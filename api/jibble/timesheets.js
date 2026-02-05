@@ -2,24 +2,24 @@ import { jibbleFetch } from './_auth.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
 
   try {
-    const { startDate, endDate, period, personIds } = req.body;
+    const { startDate, endDate, personIds, period } = req.method === 'POST' ? req.body : req.query;
     if (!startDate || !endDate) {
       return res.status(400).json({ error: 'startDate and endDate required (YYYY-MM-DD)' });
     }
 
+    // Jibble's TimesheetsSummary is a POST endpoint
     const body = {
       date: startDate,
       endDate: endDate,
       period: period || 'Daily',
     };
     if (personIds) {
-      body.personIds = Array.isArray(personIds) ? personIds : [personIds];
+      body.personIds = typeof personIds === 'string' ? personIds.split(',') : personIds;
     }
 
     const data = await jibbleFetch('/TimesheetsSummary', {
