@@ -136,18 +136,142 @@ const getMonthOptions = () => {
 // ============ AI HELPER ============
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
 
-const POCKET_FUND_LEAVE_POLICY = `
-Pocket Fund Leave Policy:
-- Personal Leave: 1 per month. For weddings, family emergencies, important matters only.
-- Sick Leave: 1 per month. Onsite employees switch to WFH. Remote employees get half day. Full day requires doctor's note.
-- Exam Leave: As needed. Requires proof of exam.
-- Unpaid Leave: Available anytime. No limit.
-- Emergency Leave: Case by case. Needs founder approval.
-Rules:
-- Request leave 24 hours in advance via email or Slack.
-- No phone or WhatsApp approvals accepted.
+const POCKET_FUND_HR_POLICY = `
+POCKET FUND — Internal Policies & Compliance Framework
+Effective Date: 24 November 2025
+Approved By: Dev Shah — Founder, SKATECULTURE WEAR LLP (Pocket Fund)
+Applies To: All employees, interns, contractors, remote/on-site/hybrid staff
+Office: Jade Office, B-2, Madhu Estate, Lower Parel, Mumbai, Maharashtra 400013
+
+=== WORK MODE & ATTENDANCE POLICY ===
+Working days: Monday to Saturday. Alternate Saturdays will be working, as communicated in the monthly schedule.
+Minimum 6-7 productive hours per working day expected.
+All team members must remain reachable during official working hours unless approved otherwise.
+
+Work Modes:
+- On-Site: Mandatory physical presence in Mumbai office as per schedule.
+- Remote: Work from off-site location with full online availability.
+- Hybrid: Combination of remote and on-site days, pre-approved by team lead or founder.
+Employees/interns may NOT unilaterally change their work mode without prior approval.
+
+Attendance Tracking via Jibble (Mobile Version):
+- Face Recognition + Location Tracking is compulsory for all modes.
+- Clock-In and Clock-Out must be done in real time.
+- Manual entries strictly prohibited unless pre-approved.
+- Incorrect location or device tampering = invalid attendance.
+Jibble Violation Policy:
+- 1st Instance: Warning
+- 2nd Instance: Deduction equal to one full working day from stipend/salary
+- Further: Additional pay cuts per instance
+- Intentional misuse (falsifying location, face data, altering hours) = disciplinary action including possible immediate removal.
+
+Manual Entry, Missed Punches & Misconduct (compliance breaches):
+- Manually updating entries without approval
+- Purposely missing clock-in/out
+- Falsifying location or face-recognition data
+- Editing working hours to inflate attendance
+Consequences: Warning → Formal performance review → Termination. Severe misconduct = immediate removal.
+
+=== LEAVE, ABSENCE & HOLIDAY POLICY ===
+Leave Categories:
+- Personal Leave: 1 per month. Only for genuine commitments (weddings, family medical emergencies, unavoidable personal matters). NOT for casual gatherings, social events, or non-urgent plans.
+- Sick Leave: 1 per month. Onsite = work from home. Remote = half day. Full day requires valid doctor's note.
+- Exam Leave: As needed, with proof of exam (compulsory upload).
+- Unpaid Leave: Available anytime, no limit.
+- Emergency Leave: Case by case, needs founder approval.
+
+Leave Rules:
+- All leave requests MUST be submitted through the Pocket Fund Dashboard only.
+- No leave requests via email, Slack, WhatsApp, phone, or personal messages will be accepted.
+- Request leave at least 24 hours in advance (except emergencies).
 - Leave balances reset at end of each month. No carry forward.
-- Working hours: 10 AM - 6 PM IST for onsite, flexible for remote with core hours 11 AM - 4 PM.
+- Uninformed absence = Leave Without Pay (LWP) + misconduct.
+- A leave is considered paid only if: prior approval + valid reason + doctor's note for sick leave where applicable.
+- If no approval reply, the leave is NOT approved.
+- Any leave taken without approval = unpaid.
+
+=== OUTREACH PLATFORM & DAILY LOG COMPLIANCE ===
+The Outreach Platform is a core operational system. All analysts and interns must:
+- Log all outreach activity on the same working day
+- Update outreach status (sent, replied, follow-up, pipeline) accurately
+- Submit the Daily Log every working day without exception
+Failure = non-performance, not a technical issue.
+
+Daily Log is non-negotiable and directly linked to performance evaluation and stipend eligibility.
+No assumptions, backdated entries, or bulk updates accepted.
+
+Minimum Daily Outreach: 10 verified reachouts per working day.
+Valid reachout criteria: logged same day, includes platform (LinkedIn/Gmail/X/Instagram), status marked as Sent, not a duplicate.
+Does NOT count: drafted but unsent, duplicates, backdated/bulk entries, incomplete entries, no proper status.
+
+Pay Cut for non-compliance:
+- 1st Instance: Formal warning
+- 2nd Instance: Stipend deduction = one full working day
+- Repeated: Additional pay cuts per Policy Violation & Pay Cut Framework
+No excuses accepted (forgetting, workload, internet issues without prior communication).
+
+If facing technical issues, access problems, or platform confusion: inform Dev or Aum immediately, same day. Silence = non-compliance.
+
+=== CODE OF CONDUCT ===
+- Treat all colleagues, founders, sellers, clients, and external partners with respect.
+- Harassment, discrimination, or misconduct = disciplinary action.
+- Maintain integrity in communication, reporting, and representation.
+- Represent Pocket Fund professionally across all interactions.
+- No use of company name, brand, email, or assets without approval.
+- Public statements, social media posts, or press interactions must be pre-approved.
+
+=== CONFIDENTIALITY & DATA HANDLING ===
+Confidential information includes: seller data, MRR, financials, Stripe screenshots, client lists, deal sheets, LOIs, NDAs, internal processes, Notion databases, research files, employee/org data.
+- Do not share/disclose to unauthorised persons.
+- Only access files necessary for your role.
+- No personal storage of company data without approval.
+- Use only approved platforms (Notion, Slack, Teams, GDrive).
+- Passwords must not be shared.
+Breach = immediate termination + legal action under Indian Contract Law, IT Act, and LLP Agreements.
+
+=== DELIVERABLES & PERFORMANCE REVIEW ===
+Tasks assigned via Slack, Notion, or Teams with expected deliverables, deadlines, and quality benchmarks.
+Performance criteria: output quality, consistency, accountability, communication, initiative.
+Review: Weekly updates mandatory, monthly review with team lead/founder. Underperformance may lead to PIP.
+
+=== DEVICE & TOOLS USAGE ===
+Approved tools: Email, Slack, Notion, Google Workspace, Microsoft Teams, Internal systems.
+Personal devices must be secure and updated. Company accounts must not be shared. No unauthorised recordings.
+
+=== STIPEND & PAYMENT POLICY ===
+Payment cycle: 1st-7th of each month for previous month.
+Eligibility based on: attendance, task completion, behaviour, quality, overall performance.
+Deductions for: poor attendance, low performance/minimum outreach, policy violations, repeated delays, wrong Jibble entries, misuse of tools.
+Structure: 1st mistake = warning, 2nd = one working day deduction, further = continued pay cuts per violation count.
+
+=== POLICY VIOLATION & PAY CUT FRAMEWORK ===
+Violation categories: attendance, Jibble misuse, delayed/incomplete work, poor communication, behavioural misconduct, confidentiality breach, failure to follow instructions.
+Deductions based on: severity, frequency, impact on team, monthly performance.
+Possible: warning → one-day deduction → percentage-based (5-35%) → complete stipend hold (severe breaches).
+Non-negotiable violations (immediate termination): data mishandling, fake clock-ins, attendance tampering, sharing confidential info.
+
+=== MONTHLY BONUS & RECOGNITION ===
+One team member selected monthly based on: attendance quality, performance, consistency, Jibble accuracy, initiative, policy compliance.
+Rewards: company gifts, branded merchandise, monetary vouchers, shopping vouchers.
+All active employees/interns/analysts eligible. Policy violations during month = disqualification.
+Winners announced last week of following month on Slack/official channels.
+
+=== REFERRAL POLICY ===
+Refer a candidate → if they join, perform well, stay 6 months → referral bonus up to Rs 25,000.
+Must be new applicant not in pipeline. Bonus processed after 6 months + HR verification. First referral gets priority.
+
+=== INTERNSHIP & CONFIRMATION ===
+Defined start/end dates, weekly hour commitment, conversion depends on performance.
+Exit: log out all apps, transfer files/access, delete confidential data from personal devices, return assets, complete exit clearance. Failure = stipend withheld.
+
+=== TRAVEL & REIMBURSEMENT ===
+Only for on-site employees/interns. Remote/hybrid not eligible unless assigned by founder.
+Approved transport: Bus, Local Train, Metro only.
+NOT covered: Cab (Uber/Ola), Auto, Taxi, personal vehicle fuel, premium travel.
+Requires: original ticket/receipt, date and route, attendance report.
+Monthly limit: Rs 1,500. Above requires prior written approval.
+Processing: 5-6 working days after valid proof submission.
+Fraudulent/inflated claims = disciplinary action.
 `;
 
 const callClaude = async (systemPrompt, userMessage) => {
@@ -1264,10 +1388,10 @@ export default function PocketFundDashboard() {
                     ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-200' 
                     : 'bg-gradient-to-r from-violet-50 to-purple-50 text-violet-600 hover:from-violet-100 hover:to-purple-100 border border-violet-200'
                 }`}
-                title="AI Leave Policy Assistant"
+                title="PF AI"
               >
                 <Sparkles size={15} />
-                <span className="hidden lg:inline">AI Help</span>
+                <span className="hidden lg:inline">PF AI</span>
               </button>
               {/* Sync Indicator */}
               <button
@@ -1913,7 +2037,7 @@ export default function PocketFundDashboard() {
                   
                   <div className="mt-4 p-3 bg-amber-50 rounded-xl">
                     <p className="text-xs text-amber-700">
-                      <strong>Note:</strong> Request leave 24hrs in advance via email/Slack. No phone/WhatsApp approvals.
+                      <strong>Note:</strong> All leave requests must be submitted through this dashboard only. No email, Slack, or personal messages accepted.
                     </p>
                   </div>
                 </div>
@@ -5718,7 +5842,7 @@ function EmployeeDetailPanel({ employee, onUpdate }) {
 // ============ AI LEAVE Q&A BOT ============
 function LeaveQABot({ onClose }) {
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: "Hi! I'm Pocket Fund's leave policy assistant. Ask me anything about leaves, working hours, or time-off policies." },
+    { role: 'assistant', text: "Hi! I'm PF AI — Pocket Fund's HR assistant. I know all company policies including leave, attendance, Jibble, outreach, stipend, code of conduct, confidentiality, travel reimbursement, and more. Ask me anything!" },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -5735,7 +5859,7 @@ function LeaveQABot({ onClose }) {
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setLoading(true);
 
-    const systemPrompt = `You are a helpful HR assistant for Pocket Fund. Answer questions about leave policy based on this information:\n${POCKET_FUND_LEAVE_POLICY}\nBe concise (2-4 sentences max). If you don't know something, say so honestly. Be friendly and professional. Do not use markdown formatting.`;
+    const systemPrompt = `You are PF AI, the official HR assistant for Pocket Fund (SKATECULTURE WEAR LLP). You have complete knowledge of all company policies. Answer questions based on this comprehensive policy document:\n${POCKET_FUND_HR_POLICY}\nIMPORTANT RULES:\n- Always emphasize that leave requests MUST be submitted through the Pocket Fund Dashboard only — no email, Slack, WhatsApp, phone, or personal messages accepted.\n- Be accurate and cite specific policy sections when relevant.\n- Be concise (2-5 sentences max). If a question needs a longer answer, keep it structured.\n- If you don't know something or it's not in the policy, say so honestly.\n- Be friendly, professional, and helpful.\n- Do not use markdown formatting.\n- You can answer about: leaves, attendance, Jibble, outreach platform, daily log, code of conduct, confidentiality, performance reviews, stipend/payment, pay cuts, monthly bonus, referrals, internship, travel reimbursement, and all other company policies.`;
 
     const history = messages.slice(-6).map(m => `${m.role}: ${m.text}`).join('\n');
     const result = await callClaude(systemPrompt, `${history}\nuser: ${userMsg}`);
@@ -5753,7 +5877,7 @@ function LeaveQABot({ onClose }) {
             <Bot size={16} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900">Leave Policy Assistant</p>
+            <p className="text-sm font-semibold text-slate-900">PF AI</p>
             <p className="text-xs text-emerald-600 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
               Online
@@ -5794,7 +5918,7 @@ function LeaveQABot({ onClose }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Ask about leave policy..."
+          placeholder="Ask PF AI anything..."
           className="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20"
         />
         <button
