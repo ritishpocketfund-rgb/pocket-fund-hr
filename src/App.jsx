@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { Bell, Search, Plus, Filter, Clock, AlertCircle, CheckCircle2, MessageSquare, Calendar, Users, TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Send, X, ChevronDown, LogOut, User, Settings, Paperclip, Eye, EyeOff, RefreshCw, Trash2, Edit3, Check, AlertTriangle, Home, FileText, BarChart3, UserCheck, Mail, Lock, Megaphone, BellRing, Pin, Archive, Volume2, VolumeX, Moon, Sun, Palette, Shield, ChevronRight, Star, Globe, Briefcase, Wallet, IndianRupee, CircleDot, Wifi, WifiOff, Sparkles, Bot, MessageCircle } from 'lucide-react';
+import { Bell, Search, Plus, Filter, Clock, AlertCircle, CheckCircle2, MessageSquare, Calendar, Users, TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Send, X, ChevronDown, LogOut, User, Settings, Paperclip, Eye, EyeOff, RefreshCw, Trash2, Edit3, Check, AlertTriangle, Home, FileText, BarChart3, UserCheck, Mail, Lock, Megaphone, BellRing, Pin, Archive, Volume2, VolumeX, Moon, Sun, Palette, Shield, ChevronRight, Star, Globe, Briefcase, Wallet, IndianRupee, CircleDot, Wifi, WifiOff, Sparkles, Bot, MessageCircle, Phone, MapPin, Building, CreditCard, Heart, Camera, ChevronLeft, Upload, Image } from 'lucide-react';
 import { storage } from './lib/supabase';
 
 // ============ UTILITY FUNCTIONS ============
@@ -40,6 +40,20 @@ const LEAVE_STATUSES = ['Pending', 'Approved', 'Rejected'];
 const ANNOUNCEMENT_PRIORITIES = ['Normal', 'Important', 'Urgent'];
 const ANNOUNCEMENT_CATEGORIES = ['General', 'Policy Update', 'Event', 'Maintenance', 'Achievement', 'Reminder'];
 const NOTIFICATION_TYPES = ['ticket_update', 'leave_update', 'announcement', 'comment', 'assignment', 'system', 'salary_update'];
+
+const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'];
+const INDIAN_STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Chandigarh','Puducherry','Jammu & Kashmir','Ladakh'];
+
+// Default extended profile fields
+const DEFAULT_EXTENDED_PROFILE = {
+  gender: '',
+  dob: '',
+  phone: '',
+  profilePhoto: '',
+  address: { line1: '', landmark: '', city: '', state: '', pincode: '', country: 'India' },
+  emergencyContact: { name: '', phone: '', relation: '' },
+  bankDetails: { holderName: '', accountNumber: '', ifsc: '', bankName: '', upiId: '' },
+};
 
 // Salary / Stipend status values
 const SALARY_STATUSES = ['Not Processed', 'In Progress', 'Delayed', 'Processed', 'On Hold'];
@@ -339,6 +353,7 @@ export default function PocketFundDashboard() {
   const [showAIChat, setShowAIChat] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showNewSuggestionModal, setShowNewSuggestionModal] = useState(false);
+  const [viewingEmployee, setViewingEmployee] = useState(null);
 
   // Load data from storage
   useEffect(() => {
@@ -2053,7 +2068,14 @@ export default function PocketFundDashboard() {
                               <span className="text-xs text-slate-400 font-mono">{emp.id}</span>
                             </div>
                             {/* Remove Button */}
-                            <div className="col-span-1 text-right">
+                            <div className="col-span-1 text-right flex justify-end gap-1">
+                              <button
+                                onClick={() => setViewingEmployee(emp)}
+                                className="p-2 text-slate-300 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                title="View details"
+                              >
+                                <Eye size={16} />
+                              </button>
                               <button
                                 onClick={() => handleRemoveEmployee(emp.id)}
                                 className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
@@ -2498,6 +2520,25 @@ export default function PocketFundDashboard() {
         />
       </SlidePanel>
 
+      {/* Employee Detail Panel (Admin) */}
+      <SlidePanel
+        isOpen={!!viewingEmployee}
+        onClose={() => setViewingEmployee(null)}
+        title={viewingEmployee?.name || 'Employee Details'}
+      >
+        {viewingEmployee && (
+          <EmployeeDetailPanel
+            employee={viewingEmployee}
+            onUpdate={async (updates) => {
+              const newEmployees = employees.map(e => e.id === viewingEmployee.id ? { ...e, ...updates } : e);
+              await saveEmployees(newEmployees);
+              setViewingEmployee({ ...viewingEmployee, ...updates });
+              showToast('Employee details updated!');
+            }}
+          />
+        )}
+      </SlidePanel>
+
       {/* AI Leave Policy Chat */}
       {showAIChat && <LeaveQABot onClose={() => setShowAIChat(false)} />}
 
@@ -2627,106 +2668,264 @@ function AuthScreen({ employees, onLogin, toast, setToast }) {
 
 // ============ PROFILE SETUP SCREEN (First Login) ============
 function ProfileSetupScreen({ currentUser, onComplete, onLogout, toast, setToast }) {
+  const [step, setStep] = useState(1);
+  const totalSteps = 4;
+  const [error, setError] = useState('');
   const [profileData, setProfileData] = useState({
     name: currentUser.name || '',
     dept: currentUser.dept || 'Engineering',
+    gender: '',
+    dob: '',
+    phone: '',
+    profilePhoto: '',
+    address: { line1: '', landmark: '', city: '', state: '', pincode: '', country: 'India' },
+    emergencyContact: { name: '', phone: '', relation: '' },
+    bankDetails: { holderName: '', accountNumber: '', ifsc: '', bankName: '', upiId: '' },
   });
-  const [error, setError] = useState('');
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500 * 1024) { setError('Photo must be under 500KB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setProfileData(p => ({ ...p, profilePhoto: reader.result }));
+    reader.readAsDataURL(file);
+  };
+
+  const validateStep = () => {
+    setError('');
+    if (step === 1) {
+      if (!profileData.name.trim()) { setError('Full name is required'); return false; }
+      if (!profileData.dept) { setError('Department is required'); return false; }
+      if (!profileData.gender) { setError('Gender is required'); return false; }
+      if (!profileData.dob) { setError('Date of birth is required'); return false; }
+      if (!profileData.phone || profileData.phone.length < 10) { setError('Valid phone number is required'); return false; }
+    } else if (step === 2) {
+      if (!profileData.address.line1.trim()) { setError('Address is required'); return false; }
+      if (!profileData.address.city.trim()) { setError('City is required'); return false; }
+      if (!profileData.address.state) { setError('State is required'); return false; }
+      if (!profileData.address.pincode || profileData.address.pincode.length !== 6) { setError('Valid 6-digit pincode is required'); return false; }
+    } else if (step === 3) {
+      if (!profileData.emergencyContact.name.trim()) { setError('Emergency contact name is required'); return false; }
+      if (!profileData.emergencyContact.phone || profileData.emergencyContact.phone.length < 10) { setError('Valid emergency phone is required'); return false; }
+      if (!profileData.emergencyContact.relation.trim()) { setError('Relation is required'); return false; }
+    }
+    return true;
+  };
+
+  const handleNext = () => { if (validateStep()) setStep(s => Math.min(s + 1, totalSteps)); };
+  const handleBack = () => { setError(''); setStep(s => Math.max(s - 1, 1)); };
 
   const handleSubmit = () => {
-    setError('');
-    if (!profileData.name.trim()) {
-      setError('Please enter your full name');
-      return;
-    }
-    if (!profileData.dept) {
-      setError('Please select your department');
-      return;
-    }
-    onComplete({ name: profileData.name.trim(), dept: profileData.dept });
+    // Bank details are optional but if partially filled, validate
+    onComplete({
+      name: profileData.name.trim(),
+      dept: profileData.dept,
+      gender: profileData.gender,
+      dob: profileData.dob,
+      phone: profileData.phone,
+      profilePhoto: profileData.profilePhoto,
+      address: profileData.address,
+      emergencyContact: profileData.emergencyContact,
+      bankDetails: profileData.bankDetails,
+    });
   };
+
+  const updateAddress = (key, val) => setProfileData(p => ({ ...p, address: { ...p.address, [key]: val } }));
+  const updateEmergency = (key, val) => setProfileData(p => ({ ...p, emergencyContact: { ...p.emergencyContact, [key]: val } }));
+  const updateBank = (key, val) => setProfileData(p => ({ ...p, bankDetails: { ...p.bankDetails, [key]: val } }));
+
+  const inputCls = "w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-purple-50 flex items-center justify-center p-4 font-['DM_Sans',sans-serif]">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-500/30">
-            <span className="text-white font-bold text-2xl">P</span>
+      <div className="w-full max-w-lg">
+        <div className="text-center mb-6">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-violet-500/30">
+            <span className="text-white font-bold text-xl">P</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">Welcome to Pocket Fund!</h1>
-          <p className="text-slate-500 mt-1">Let's set up your profile</p>
+          <h1 className="text-xl font-bold text-slate-900">Complete Your Profile</h1>
+          <p className="text-slate-500 text-sm mt-1">Step {step} of {totalSteps}</p>
         </div>
 
-        {/* Profile Setup Card */}
+        {/* Progress Bar */}
+        <div className="flex gap-1.5 mb-6">
+          {Array.from({ length: totalSteps }, (_, i) => (
+            <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors ${i < step ? 'bg-violet-500' : 'bg-slate-200'}`} />
+          ))}
+        </div>
+
         <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
           <div className="p-6">
-            <div className="flex items-center gap-3 mb-6 p-3 bg-violet-50 rounded-xl">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
-                {currentUser.name?.charAt(0) || '?'}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-violet-900">Logged in as</p>
-                <p className="text-xs text-violet-600">{currentUser.email}</p>
-              </div>
-            </div>
-
-            <h2 className="text-lg font-bold text-slate-900 mb-1">Complete Your Profile</h2>
-            <p className="text-slate-500 text-sm mb-5">This is a one-time setup. You can update it later.</p>
-
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 flex items-start gap-2">
-                <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+                <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
             )}
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input
-                    type="text"
-                    value={profileData.name}
-                    onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                    placeholder="Your full name"
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
-                  />
+            {/* Step 1: Personal Info */}
+            {step === 1 && (
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2"><User size={18} className="text-violet-600" /> Personal Information</h3>
+                {/* Photo Upload */}
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    {profileData.profilePhoto ? (
+                      <img src={profileData.profilePhoto} className="w-16 h-16 rounded-xl object-cover" alt="Profile" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center"><Camera size={24} className="text-slate-400" /></div>
+                    )}
+                    <label className="absolute -bottom-1 -right-1 w-7 h-7 bg-violet-600 rounded-lg flex items-center justify-center cursor-pointer hover:bg-violet-700 transition-colors">
+                      <Upload size={13} className="text-white" />
+                      <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                    </label>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Profile Photo</p>
+                    <p className="text-xs text-slate-400">Optional · Max 500KB</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Full Name *</label>
+                    <input type="text" value={profileData.name} onChange={e => setProfileData(p => ({ ...p, name: e.target.value }))} placeholder="Your full name" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Department *</label>
+                    <select value={profileData.dept} onChange={e => setProfileData(p => ({ ...p, dept: e.target.value }))} className={inputCls}>
+                      {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Gender *</label>
+                    <select value={profileData.gender} onChange={e => setProfileData(p => ({ ...p, gender: e.target.value }))} className={inputCls}>
+                      <option value="">Select</option>
+                      {GENDER_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth *</label>
+                    <input type="date" value={profileData.dob} onChange={e => setProfileData(p => ({ ...p, dob: e.target.value }))} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Phone Number *</label>
+                    <input type="tel" value={profileData.phone} onChange={e => setProfileData(p => ({ ...p, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} placeholder="10-digit number" className={inputCls} />
+                  </div>
                 </div>
               </div>
+            )}
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Department</label>
-                <select
-                  value={profileData.dept}
-                  onChange={(e) => setProfileData({ ...profileData, dept: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
-                >
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+            {/* Step 2: Address */}
+            {step === 2 && (
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2"><MapPin size={18} className="text-violet-600" /> Home Address</h3>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Address Line *</label>
+                  <input type="text" value={profileData.address.line1} onChange={e => updateAddress('line1', e.target.value)} placeholder="House/Flat No., Street, Area" className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Landmark</label>
+                  <input type="text" value={profileData.address.landmark} onChange={e => updateAddress('landmark', e.target.value)} placeholder="Near..." className={inputCls} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">City *</label>
+                    <input type="text" value={profileData.address.city} onChange={e => updateAddress('city', e.target.value)} placeholder="City" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">State *</label>
+                    <select value={profileData.address.state} onChange={e => updateAddress('state', e.target.value)} className={inputCls}>
+                      <option value="">Select State</option>
+                      {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Pincode *</label>
+                    <input type="text" value={profileData.address.pincode} onChange={e => updateAddress('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Country</label>
+                    <input type="text" value={profileData.address.country} onChange={e => updateAddress('country', e.target.value)} className={inputCls} />
+                  </div>
+                </div>
               </div>
+            )}
 
-              <button
-                onClick={handleSubmit}
-                className="w-full py-3 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors"
-              >
-                Get Started →
-              </button>
-            </div>
+            {/* Step 3: Emergency Contact */}
+            {step === 3 && (
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2"><Heart size={18} className="text-red-500" /> Emergency Contact</h3>
+                <p className="text-xs text-slate-500">This person will be contacted in case of an emergency.</p>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Contact Name *</label>
+                  <input type="text" value={profileData.emergencyContact.name} onChange={e => updateEmergency('name', e.target.value)} placeholder="Full name" className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Contact Phone *</label>
+                  <input type="tel" value={profileData.emergencyContact.phone} onChange={e => updateEmergency('phone', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit number" className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Relation *</label>
+                  <input type="text" value={profileData.emergencyContact.relation} onChange={e => updateEmergency('relation', e.target.value)} placeholder="e.g. Father, Mother, Spouse" className={inputCls} />
+                </div>
+              </div>
+            )}
 
-            <div className="mt-4 text-center">
-              <button
-                onClick={onLogout}
-                className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                Sign out
-              </button>
+            {/* Step 4: Bank Details */}
+            {step === 4 && (
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2"><CreditCard size={18} className="text-violet-600" /> Bank / Payment Details</h3>
+                <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                  <p className="text-xs text-amber-700"><strong>Optional but recommended.</strong> Used for salary/stipend processing. You can add this later in Settings.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Account Holder Name</label>
+                  <input type="text" value={profileData.bankDetails.holderName} onChange={e => updateBank('holderName', e.target.value)} placeholder="As per bank records" className={inputCls} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Account Number</label>
+                    <input type="text" value={profileData.bankDetails.accountNumber} onChange={e => updateBank('accountNumber', e.target.value.replace(/\D/g, ''))} placeholder="Account number" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">IFSC Code</label>
+                    <input type="text" value={profileData.bankDetails.ifsc} onChange={e => updateBank('ifsc', e.target.value.toUpperCase().slice(0, 11))} placeholder="e.g. SBIN0001234" className={inputCls} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Bank Name</label>
+                  <input type="text" value={profileData.bankDetails.bankName} onChange={e => updateBank('bankName', e.target.value)} placeholder="e.g. State Bank of India" className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">UPI ID</label>
+                  <input type="text" value={profileData.bankDetails.upiId} onChange={e => updateBank('upiId', e.target.value)} placeholder="yourname@upi" className={inputCls} />
+                </div>
+              </div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
+              {step > 1 ? (
+                <button onClick={handleBack} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors">
+                  <ChevronLeft size={16} /> Back
+                </button>
+              ) : (
+                <button onClick={onLogout} className="text-sm text-slate-400 hover:text-slate-600 transition-colors">Sign out</button>
+              )}
+              {step < totalSteps ? (
+                <button onClick={handleNext} className="px-6 py-2.5 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors text-sm flex items-center gap-1.5">
+                  Next <ChevronRight size={16} />
+                </button>
+              ) : (
+                <button onClick={handleSubmit} className="px-6 py-2.5 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors text-sm">
+                  Complete Setup →
+                </button>
+              )}
             </div>
           </div>
         </div>
       </div>
-
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
@@ -4027,19 +4226,42 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
     name: currentUser.name || '',
     dept: currentUser.dept || '',
     bio: currentUser.settings?.bio || '',
+    gender: currentUser.gender || '',
+    dob: currentUser.dob || '',
+    phone: currentUser.phone || '',
+    profilePhoto: currentUser.profilePhoto || '',
+    address: currentUser.address || { line1: '', landmark: '', city: '', state: '', pincode: '', country: 'India' },
+    emergencyContact: currentUser.emergencyContact || { name: '', phone: '', relation: '' },
+    bankDetails: currentUser.bankDetails || { holderName: '', accountNumber: '', ifsc: '', bankName: '', upiId: '' },
   });
   const [notifPrefs, setNotifPrefs] = useState(
     currentUser.settings?.notifications || { tickets: true, leaves: true, announcements: true, comments: true }
   );
   const [profileSaving, setProfileSaving] = useState(false);
 
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500 * 1024) { showToast('Photo must be under 500KB', 'error'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setProfileData(p => ({ ...p, profilePhoto: reader.result }));
+    reader.readAsDataURL(file);
+  };
+
   const handleProfileSave = async () => {
-    if (!profileData.name.trim()) {
-      showToast('Name is required', 'error');
-      return;
-    }
+    if (!profileData.name.trim()) { showToast('Name is required', 'error'); return; }
     setProfileSaving(true);
-    await onUpdateProfile({ name: profileData.name.trim(), dept: profileData.dept });
+    await onUpdateProfile({
+      name: profileData.name.trim(),
+      dept: profileData.dept,
+      gender: profileData.gender,
+      dob: profileData.dob,
+      phone: profileData.phone,
+      profilePhoto: profileData.profilePhoto,
+      address: profileData.address,
+      emergencyContact: profileData.emergencyContact,
+      bankDetails: profileData.bankDetails,
+    });
     await onUpdateSettings({ bio: profileData.bio, notifications: notifPrefs });
     setProfileSaving(false);
   };
@@ -4050,8 +4272,15 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
     await onUpdateSettings({ notifications: updated });
   };
 
+  const updateAddress = (key, val) => setProfileData(p => ({ ...p, address: { ...p.address, [key]: val } }));
+  const updateEmergency = (key, val) => setProfileData(p => ({ ...p, emergencyContact: { ...p.emergencyContact, [key]: val } }));
+  const updateBank = (key, val) => setProfileData(p => ({ ...p, bankDetails: { ...p.bankDetails, [key]: val } }));
+
   const sections = [
     { id: 'profile', name: 'Profile', icon: User },
+    { id: 'address', name: 'Address', icon: MapPin },
+    { id: 'emergency', name: 'Emergency Contact', icon: Heart },
+    { id: 'bank', name: 'Bank Details', icon: CreditCard },
     { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'account', name: 'Account', icon: Shield },
   ];
@@ -4064,6 +4293,7 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
     'from-blue-400 to-indigo-500',
   ];
   const avatarColor = avatarColors[currentUser.name.charCodeAt(0) % avatarColors.length];
+  const inputCls = "w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300";
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -4072,9 +4302,13 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-slate-100">
             <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${avatarColor} flex items-center justify-center text-white font-semibold`}>
-                {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-              </div>
+              {profileData.profilePhoto ? (
+                <img src={profileData.profilePhoto} className="w-12 h-12 rounded-xl object-cover" alt="" />
+              ) : (
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${avatarColor} flex items-center justify-center text-white font-semibold`}>
+                  {currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                </div>
+              )}
               <div className="min-w-0">
                 <p className="font-semibold text-slate-900 truncate">{currentUser.name}</p>
                 <p className="text-xs text-slate-500 truncate">{currentUser.email}</p>
@@ -4086,13 +4320,11 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
               <button
                 key={sec.id}
                 onClick={() => setActiveSection(sec.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm ${
-                  activeSection === sec.id
-                    ? 'bg-violet-50 text-violet-700 font-semibold'
-                    : 'text-slate-600 hover:bg-slate-50'
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-sm ${
+                  activeSection === sec.id ? 'bg-violet-50 text-violet-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                <sec.icon size={18} />
+                <sec.icon size={16} />
                 {sec.name}
                 <ChevronRight size={14} className="ml-auto text-slate-300" />
               </button>
@@ -4107,14 +4339,24 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
         {activeSection === 'profile' && (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
             <div className="p-6 border-b border-slate-100">
-              <h3 className="text-lg font-bold text-slate-900">Profile Settings</h3>
-              <p className="text-sm text-slate-500 mt-1">Update your personal information</p>
+              <h3 className="text-lg font-bold text-slate-900">Personal Information</h3>
+              <p className="text-sm text-slate-500 mt-1">Update your personal details and photo</p>
             </div>
             <div className="p-6 space-y-5">
-              {/* Avatar Preview */}
+              {/* Photo */}
               <div className="flex items-center gap-5">
-                <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${avatarColor} flex items-center justify-center text-white font-bold text-2xl`}>
-                  {profileData.name.split(' ').map(n => n[0]).join('').slice(0, 2) || '?'}
+                <div className="relative">
+                  {profileData.profilePhoto ? (
+                    <img src={profileData.profilePhoto} className="w-20 h-20 rounded-2xl object-cover" alt="" />
+                  ) : (
+                    <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${avatarColor} flex items-center justify-center text-white font-bold text-2xl`}>
+                      {profileData.name.split(' ').map(n => n[0]).join('').slice(0, 2) || '?'}
+                    </div>
+                  )}
+                  <label className="absolute -bottom-1 -right-1 w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center cursor-pointer hover:bg-violet-700 transition-colors shadow-md">
+                    <Camera size={14} className="text-white" />
+                    <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                  </label>
                 </div>
                 <div>
                   <p className="font-semibold text-slate-900">{profileData.name || 'Your Name'}</p>
@@ -4125,58 +4367,163 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    value={profileData.name}
-                    onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
-                  />
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Full Name</label>
+                  <input type="text" value={profileData.name} onChange={e => setProfileData(p => ({ ...p, name: e.target.value }))} className={inputCls} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Department</label>
-                  <select
-                    value={profileData.dept}
-                    onChange={(e) => setProfileData({ ...profileData, dept: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
-                  >
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Department</label>
+                  <select value={profileData.dept} onChange={e => setProfileData(p => ({ ...p, dept: e.target.value }))} className={inputCls}>
                     <option value="">Select Department</option>
                     {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Gender</label>
+                  <select value={profileData.gender} onChange={e => setProfileData(p => ({ ...p, gender: e.target.value }))} className={inputCls}>
+                    <option value="">Select</option>
+                    {GENDER_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Date of Birth</label>
+                  <input type="date" value={profileData.dob} onChange={e => setProfileData(p => ({ ...p, dob: e.target.value }))} className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+                  <input type="tel" value={profileData.phone} onChange={e => setProfileData(p => ({ ...p, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} placeholder="10-digit" className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Email</label>
+                  <input type="email" value={currentUser.email} disabled className="w-full px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed" />
+                </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={currentUser.email}
-                  disabled
-                  className="w-full px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed"
-                />
-                <p className="text-xs text-slate-400 mt-1">Email cannot be changed</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Bio</label>
-                <textarea
-                  value={profileData.bio}
-                  onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
-                  placeholder="A short bio about yourself..."
-                  rows={3}
-                  maxLength={200}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300 resize-none"
-                />
-                <p className="text-xs text-slate-400 mt-1">{profileData.bio.length}/200 characters</p>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Bio</label>
+                <textarea value={profileData.bio} onChange={e => setProfileData(p => ({ ...p, bio: e.target.value }))} placeholder="A short bio about yourself..." rows={3} maxLength={200} className={`${inputCls} resize-none`} />
+                <p className="text-xs text-slate-400 mt-1">{profileData.bio.length}/200</p>
               </div>
 
               <div className="pt-4 border-t border-slate-100">
-                <button
-                  onClick={handleProfileSave}
-                  disabled={profileSaving}
-                  className="px-6 py-2.5 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50"
-                >
+                <button onClick={handleProfileSave} disabled={profileSaving} className="px-6 py-2.5 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50">
                   {profileSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Address Section */}
+        {activeSection === 'address' && (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+            <div className="p-6 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900">Home Address</h3>
+              <p className="text-sm text-slate-500 mt-1">Your residential address for company records</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Address Line</label>
+                <input type="text" value={profileData.address.line1} onChange={e => updateAddress('line1', e.target.value)} placeholder="House/Flat No., Street, Area" className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Landmark</label>
+                <input type="text" value={profileData.address.landmark} onChange={e => updateAddress('landmark', e.target.value)} placeholder="Near..." className={inputCls} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">City</label>
+                  <input type="text" value={profileData.address.city} onChange={e => updateAddress('city', e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">State</label>
+                  <select value={profileData.address.state} onChange={e => updateAddress('state', e.target.value)} className={inputCls}>
+                    <option value="">Select State</option>
+                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Pincode</label>
+                  <input type="text" value={profileData.address.pincode} onChange={e => updateAddress('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit" className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Country</label>
+                  <input type="text" value={profileData.address.country} onChange={e => updateAddress('country', e.target.value)} className={inputCls} />
+                </div>
+              </div>
+              <div className="pt-4 border-t border-slate-100">
+                <button onClick={handleProfileSave} disabled={profileSaving} className="px-6 py-2.5 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50">
+                  {profileSaving ? 'Saving...' : 'Save Address'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Emergency Contact Section */}
+        {activeSection === 'emergency' && (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+            <div className="p-6 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900">Emergency Contact</h3>
+              <p className="text-sm text-slate-500 mt-1">Person to contact in case of emergency</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Contact Name</label>
+                <input type="text" value={profileData.emergencyContact.name} onChange={e => updateEmergency('name', e.target.value)} placeholder="Full name" className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Phone Number</label>
+                <input type="tel" value={profileData.emergencyContact.phone} onChange={e => updateEmergency('phone', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit" className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Relation</label>
+                <input type="text" value={profileData.emergencyContact.relation} onChange={e => updateEmergency('relation', e.target.value)} placeholder="e.g. Father, Mother, Spouse" className={inputCls} />
+              </div>
+              <div className="pt-4 border-t border-slate-100">
+                <button onClick={handleProfileSave} disabled={profileSaving} className="px-6 py-2.5 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50">
+                  {profileSaving ? 'Saving...' : 'Save Emergency Contact'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bank Details Section */}
+        {activeSection === 'bank' && (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+            <div className="p-6 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900">Bank / Payment Details</h3>
+              <p className="text-sm text-slate-500 mt-1">Used for salary and stipend processing</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                <p className="text-xs text-amber-700 flex items-center gap-2"><Lock size={12} /> Your bank details are stored securely and visible only to you and the admin.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Account Holder Name</label>
+                <input type="text" value={profileData.bankDetails.holderName} onChange={e => updateBank('holderName', e.target.value)} placeholder="As per bank records" className={inputCls} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Account Number</label>
+                  <input type="text" value={profileData.bankDetails.accountNumber} onChange={e => updateBank('accountNumber', e.target.value.replace(/\D/g, ''))} className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">IFSC Code</label>
+                  <input type="text" value={profileData.bankDetails.ifsc} onChange={e => updateBank('ifsc', e.target.value.toUpperCase().slice(0, 11))} placeholder="SBIN0001234" className={inputCls} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Bank Name</label>
+                <input type="text" value={profileData.bankDetails.bankName} onChange={e => updateBank('bankName', e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">UPI ID</label>
+                <input type="text" value={profileData.bankDetails.upiId} onChange={e => updateBank('upiId', e.target.value)} placeholder="yourname@upi" className={inputCls} />
+              </div>
+              <div className="pt-4 border-t border-slate-100">
+                <button onClick={handleProfileSave} disabled={profileSaving} className="px-6 py-2.5 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50">
+                  {profileSaving ? 'Saving...' : 'Save Bank Details'}
                 </button>
               </div>
             </div>
@@ -4307,7 +4654,7 @@ function SalaryStatusPage({ currentUser, employees, salaryRecords, getSalaryReco
   const [adminSearch, setAdminSearch] = useState('');
   const [updating, setUpdating] = useState(false);
 
-  const activeEmployees = employees.filter(e => e.role !== 'admin' && e.profileComplete);
+  const activeEmployees = employees.filter(e => e.role !== 'admin');
 
   const filteredAdminEmployees = useMemo(() => {
     if (!adminSearch) return activeEmployees;
@@ -4685,20 +5032,28 @@ function SalaryStatusPage({ currentUser, employees, salaryRecords, getSalaryReco
 const SUGGESTION_CATEGORIES = ['General', 'Work Culture', 'Management', 'Tools & Tech', 'HR & Policies', 'Events & Fun', 'Other'];
 
 function NewSuggestionForm({ onSubmit, onCancel }) {
-  const [form, setForm] = useState({ title: '', body: '', category: 'General' });
+  const [form, setForm] = useState({ title: '', body: '', category: 'General', attachment: null });
   const [error, setError] = useState('');
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { setError('Attachment must be under 2MB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setForm(f => ({ ...f, attachment: { name: file.name, size: file.size, type: file.type, data: reader.result } }));
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = () => {
     setError('');
     if (!form.title.trim()) { setError('Please add a short title'); return; }
     if (!form.body.trim()) { setError('Please describe your suggestion'); return; }
     if (form.body.trim().length < 10) { setError('Please write at least 10 characters'); return; }
-    onSubmit({ title: form.title.trim(), body: form.body.trim(), category: form.category });
+    onSubmit({ title: form.title.trim(), body: form.body.trim(), category: form.category, attachment: form.attachment });
   };
 
   return (
     <div className="space-y-5">
-      {/* Anonymity Notice */}
       <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl flex items-start gap-3">
         <Shield size={20} className="text-teal-600 flex-shrink-0 mt-0.5" />
         <div>
@@ -4716,53 +5071,45 @@ function NewSuggestionForm({ onSubmit, onCancel }) {
 
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
-        <input
-          type="text"
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
-          placeholder="Brief summary of your suggestion"
-          maxLength={100}
-          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300"
-        />
+        <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Brief summary of your suggestion" maxLength={100} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300" />
       </div>
-
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-        <select
-          value={form.category}
-          onChange={(e) => setForm({ ...form, category: e.target.value })}
-          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300"
-        >
+        <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300">
           {SUGGESTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
-
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Your Suggestion</label>
-        <textarea
-          value={form.body}
-          onChange={(e) => setForm({ ...form, body: e.target.value })}
-          placeholder="Describe your suggestion, idea, or feedback in detail..."
-          rows={5}
-          maxLength={2000}
-          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 resize-none"
-        />
+        <textarea value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} placeholder="Describe your suggestion, idea, or feedback in detail..." rows={5} maxLength={2000} className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 resize-none" />
         <p className="text-xs text-slate-400 mt-1">{form.body.length}/2000</p>
       </div>
 
+      {/* Attachment */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Attachment <span className="text-slate-400 font-normal">(optional)</span></label>
+        {form.attachment ? (
+          <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <div className="flex items-center gap-2 min-w-0">
+              <Paperclip size={14} className="text-teal-600 flex-shrink-0" />
+              <span className="text-sm text-slate-700 truncate">{form.attachment.name}</span>
+              <span className="text-xs text-slate-400 flex-shrink-0">({(form.attachment.size / 1024).toFixed(0)} KB)</span>
+            </div>
+            <button onClick={() => setForm(f => ({ ...f, attachment: null }))} className="p-1 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500"><X size={14} /></button>
+          </div>
+        ) : (
+          <label className="flex items-center justify-center gap-2 p-3 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 hover:border-teal-300 transition-colors">
+            <Upload size={16} className="text-slate-400" />
+            <span className="text-sm text-slate-500">Click to attach file (max 2MB)</span>
+            <input type="file" onChange={handleFileUpload} className="hidden" accept="image/*,.pdf,.doc,.docx,.txt" />
+          </label>
+        )}
+      </div>
+
       <div className="flex gap-3 pt-2">
-        <button
-          onClick={onCancel}
-          className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSubmit}
-          className="flex-1 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2"
-        >
-          <Send size={16} />
-          Submit Anonymously
+        <button onClick={onCancel} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors">Cancel</button>
+        <button onClick={handleSubmit} className="flex-1 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2">
+          <Send size={16} /> Submit Anonymously
         </button>
       </div>
     </div>
@@ -4770,13 +5117,13 @@ function NewSuggestionForm({ onSubmit, onCancel }) {
 }
 
 // ============ SUGGESTIONS PAGE ============
-const SUGGESTION_STATUSES = ['New', 'Acknowledged', 'Under Review', 'Implemented', 'Declined'];
+const SUGGESTION_STATUSES = ['New', 'Acknowledged', 'Under Review', 'Accepted', 'Rejected'];
 const SUGGESTION_STATUS_STYLES = {
   'New': 'bg-blue-50 text-blue-700 border-blue-200',
   'Acknowledged': 'bg-violet-50 text-violet-700 border-violet-200',
   'Under Review': 'bg-amber-50 text-amber-700 border-amber-200',
-  'Implemented': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  'Declined': 'bg-slate-100 text-slate-500 border-slate-200',
+  'Accepted': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Rejected': 'bg-red-50 text-red-600 border-red-200',
 };
 
 function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion, onUpdateSuggestion, onDeleteSuggestion }) {
@@ -4930,6 +5277,36 @@ function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion
                       </div>
                       <span className="text-sm text-slate-400 italic">Anonymous</span>
                     </div>
+
+                    {/* Attachment */}
+                    {suggestion.attachment && (
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Paperclip size={14} className="text-blue-600 flex-shrink-0" />
+                          <span className="text-xs font-medium text-blue-700 truncate">{suggestion.attachment.name}</span>
+                          <span className="text-xs text-blue-500 flex-shrink-0">({(suggestion.attachment.size / 1024).toFixed(0)} KB)</span>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const win = window.open();
+                            if (win) {
+                              if (suggestion.attachment.type === 'application/pdf') {
+                                win.document.write(`<iframe src="${suggestion.attachment.data}" style="width:100%;height:100%;border:none;"></iframe>`);
+                              } else if (suggestion.attachment.type?.startsWith('image/')) {
+                                win.document.write(`<img src="${suggestion.attachment.data}" style="max-width:100%;height:auto;" />`);
+                              } else {
+                                win.document.write(`<pre>${atob(suggestion.attachment.data.split(',')[1] || '')}</pre>`);
+                              }
+                              win.document.title = suggestion.attachment.name;
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center gap-1 flex-shrink-0"
+                        >
+                          <Eye size={13} /> View
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Admin actions */}
@@ -5015,6 +5392,189 @@ function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============ EMPLOYEE DETAIL PANEL (Admin) ============
+function EmployeeDetailPanel({ employee, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [editData, setEditData] = useState({});
+
+  const startEdit = () => {
+    setEditData({
+      name: employee.name || '',
+      dept: employee.dept || '',
+      gender: employee.gender || '',
+      dob: employee.dob || '',
+      phone: employee.phone || '',
+      address: employee.address || { line1: '', landmark: '', city: '', state: '', pincode: '', country: 'India' },
+      emergencyContact: employee.emergencyContact || { name: '', phone: '', relation: '' },
+      bankDetails: employee.bankDetails || { holderName: '', accountNumber: '', ifsc: '', bankName: '', upiId: '' },
+    });
+    setEditing(true);
+  };
+
+  const handleSave = async () => {
+    await onUpdate(editData);
+    setEditing(false);
+  };
+
+  const inputCls = "w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300";
+  const InfoRow = ({ label, value }) => (
+    <div className="flex items-start justify-between py-2 border-b border-slate-50 last:border-0">
+      <span className="text-xs font-medium text-slate-500 w-28 flex-shrink-0">{label}</span>
+      <span className="text-sm text-slate-900 text-right">{value || '—'}</span>
+    </div>
+  );
+
+  const addr = employee.address || {};
+  const ec = employee.emergencyContact || {};
+  const bd = employee.bankDetails || {};
+
+  return (
+    <div className="p-5 space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        {employee.profilePhoto ? (
+          <img src={employee.profilePhoto} className="w-16 h-16 rounded-xl object-cover" alt="" />
+        ) : (
+          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center">
+            <span className="text-lg font-bold text-slate-600">{employee.name?.split(' ').map(n => n[0]).join('')}</span>
+          </div>
+        )}
+        <div className="flex-1">
+          <p className="font-bold text-slate-900 text-lg">{employee.name}</p>
+          <p className="text-sm text-slate-500">{employee.email}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-slate-400 font-mono">{employee.id}</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${employee.profileComplete ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+              {employee.profileComplete ? 'Active' : 'Pending setup'}
+            </span>
+          </div>
+        </div>
+        <button onClick={editing ? handleSave : startEdit} className={`px-3 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+          editing ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+        }`}>
+          {editing ? <><Check size={14}/> Save</> : <><Edit3 size={14}/> Edit</>}
+        </button>
+      </div>
+
+      {!editing ? (
+        <>
+          {/* Personal Info */}
+          <div className="bg-slate-50 rounded-xl p-4">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5"><User size={13}/> Personal</h4>
+            <InfoRow label="Department" value={employee.dept} />
+            <InfoRow label="Gender" value={employee.gender} />
+            <InfoRow label="Date of Birth" value={employee.dob ? formatDate(employee.dob) : ''} />
+            <InfoRow label="Phone" value={employee.phone} />
+            <InfoRow label="Passcode" value={employee.passcode} />
+          </div>
+
+          {/* Address */}
+          <div className="bg-slate-50 rounded-xl p-4">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5"><MapPin size={13}/> Address</h4>
+            <InfoRow label="Address" value={addr.line1} />
+            <InfoRow label="Landmark" value={addr.landmark} />
+            <InfoRow label="City" value={addr.city} />
+            <InfoRow label="State" value={addr.state} />
+            <InfoRow label="Pincode" value={addr.pincode} />
+            <InfoRow label="Country" value={addr.country} />
+          </div>
+
+          {/* Emergency Contact */}
+          <div className="bg-slate-50 rounded-xl p-4">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Heart size={13} className="text-red-400"/> Emergency Contact</h4>
+            <InfoRow label="Name" value={ec.name} />
+            <InfoRow label="Phone" value={ec.phone} />
+            <InfoRow label="Relation" value={ec.relation} />
+          </div>
+
+          {/* Bank Details */}
+          <div className="bg-slate-50 rounded-xl p-4">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5"><CreditCard size={13}/> Bank Details</h4>
+            <InfoRow label="Holder" value={bd.holderName} />
+            <InfoRow label="Account No." value={bd.accountNumber ? `****${bd.accountNumber.slice(-4)}` : ''} />
+            <InfoRow label="IFSC" value={bd.ifsc} />
+            <InfoRow label="Bank" value={bd.bankName} />
+            <InfoRow label="UPI" value={bd.upiId} />
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Edit Mode */}
+          <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><User size={13}/> Personal</h4>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Name</label>
+                <input type="text" value={editData.name} onChange={e => setEditData(d => ({ ...d, name: e.target.value }))} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Dept</label>
+                <select value={editData.dept} onChange={e => setEditData(d => ({ ...d, dept: e.target.value }))} className={inputCls}>
+                  <option value="">Select</option>
+                  {DEPARTMENTS.map(dep => <option key={dep} value={dep}>{dep}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">Gender</label>
+                <select value={editData.gender} onChange={e => setEditData(d => ({ ...d, gender: e.target.value }))} className={inputCls}>
+                  <option value="">Select</option>
+                  {GENDER_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-0.5">DOB</label>
+                <input type="date" value={editData.dob} onChange={e => setEditData(d => ({ ...d, dob: e.target.value }))} className={inputCls} />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-slate-500 mb-0.5">Phone</label>
+                <input type="tel" value={editData.phone} onChange={e => setEditData(d => ({ ...d, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))} className={inputCls} />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><MapPin size={13}/> Address</h4>
+            <input type="text" value={editData.address?.line1 || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, line1: e.target.value } }))} placeholder="Address" className={inputCls} />
+            <input type="text" value={editData.address?.landmark || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, landmark: e.target.value } }))} placeholder="Landmark" className={inputCls} />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="text" value={editData.address?.city || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, city: e.target.value } }))} placeholder="City" className={inputCls} />
+              <select value={editData.address?.state || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, state: e.target.value } }))} className={inputCls}>
+                <option value="">State</option>
+                {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <input type="text" value={editData.address?.pincode || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) } }))} placeholder="Pincode" className={inputCls} />
+              <input type="text" value={editData.address?.country || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, country: e.target.value } }))} placeholder="Country" className={inputCls} />
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Heart size={13} className="text-red-400"/> Emergency</h4>
+            <input type="text" value={editData.emergencyContact?.name || ''} onChange={e => setEditData(d => ({ ...d, emergencyContact: { ...d.emergencyContact, name: e.target.value } }))} placeholder="Name" className={inputCls} />
+            <input type="tel" value={editData.emergencyContact?.phone || ''} onChange={e => setEditData(d => ({ ...d, emergencyContact: { ...d.emergencyContact, phone: e.target.value.replace(/\D/g, '').slice(0, 10) } }))} placeholder="Phone" className={inputCls} />
+            <input type="text" value={editData.emergencyContact?.relation || ''} onChange={e => setEditData(d => ({ ...d, emergencyContact: { ...d.emergencyContact, relation: e.target.value } }))} placeholder="Relation" className={inputCls} />
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><CreditCard size={13}/> Bank</h4>
+            <input type="text" value={editData.bankDetails?.holderName || ''} onChange={e => setEditData(d => ({ ...d, bankDetails: { ...d.bankDetails, holderName: e.target.value } }))} placeholder="Account holder name" className={inputCls} />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="text" value={editData.bankDetails?.accountNumber || ''} onChange={e => setEditData(d => ({ ...d, bankDetails: { ...d.bankDetails, accountNumber: e.target.value.replace(/\D/g, '') } }))} placeholder="Account number" className={inputCls} />
+              <input type="text" value={editData.bankDetails?.ifsc || ''} onChange={e => setEditData(d => ({ ...d, bankDetails: { ...d.bankDetails, ifsc: e.target.value.toUpperCase().slice(0, 11) } }))} placeholder="IFSC" className={inputCls} />
+            </div>
+            <input type="text" value={editData.bankDetails?.bankName || ''} onChange={e => setEditData(d => ({ ...d, bankDetails: { ...d.bankDetails, bankName: e.target.value } }))} placeholder="Bank name" className={inputCls} />
+            <input type="text" value={editData.bankDetails?.upiId || ''} onChange={e => setEditData(d => ({ ...d, bankDetails: { ...d.bankDetails, upiId: e.target.value } }))} placeholder="UPI ID" className={inputCls} />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button onClick={() => setEditing(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-200">Cancel</button>
+            <button onClick={handleSave} className="flex-1 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 flex items-center justify-center gap-1.5"><Check size={15}/>Save Changes</button>
+          </div>
+        </>
       )}
     </div>
   );
