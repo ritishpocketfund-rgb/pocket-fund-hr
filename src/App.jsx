@@ -1173,6 +1173,7 @@ export default function PocketFundDashboard() {
               { id: 'tickets', name: 'Tickets', icon: MessageSquare },
               { id: 'leaves', name: 'Leave Requests', icon: Calendar },
               { id: 'salary', name: 'Salary Status', icon: Wallet },
+              { id: 'attendance', name: 'Attendance', icon: Clock },
               { id: 'announcements', name: 'Announcements', icon: Megaphone },
               { id: 'suggestions', name: 'Suggestions', icon: MessageCircle },
               ...(isAdmin ? [
@@ -2399,6 +2400,16 @@ export default function PocketFundDashboard() {
               getSalaryRecord={getSalaryRecord}
               onUpdateStatus={handleUpdateSalaryStatus}
               isAdmin={isAdmin}
+            />
+          )}
+
+          {/* Attendance Tab (Jibble Integration) */}
+          {activeTab === 'attendance' && (
+            <AttendancePage
+              currentUser={currentUser}
+              employees={employees}
+              isAdmin={isAdmin}
+              showToast={showToast}
             />
           )}
 
@@ -4634,6 +4645,463 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
               </div>
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============ ATTENDANCE PAGE (Jibble Integration) ============
+function AttendancePage({ currentUser, employees, isAdmin, showToast }) {
+  const [jibblePeople, setJibblePeople] = useState([]);
+  const [myJibbleId, setMyJibbleId] = useState(null);
+  const [isClockedIn, setIsClockedIn] = useState(false);
+  const [clockInTime, setClockInTime] = useState(null);
+  const [todayEntries, setTodayEntries] = useState([]);
+  const [timesheets, setTimesheets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [clockLoading, setClockLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [dateRange, setDateRange] = useState('week');
+  const [selectedEmployee, setSelectedEmployee] = useState('all');
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Live clock
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Calculate date range
+  const getDateRange = () => {
+    const end = new Date();
+    const start = new Date();
+    if (dateRange === 'week') start.setDate(end.getDate() - 6);
+    else if (dateRange === 'month') start.setDate(end.getDate() - 29);
+    else if (dateRange === 'today') { /* same day */ }
+    return { startDate: start.toISOString().split('T')[0], endDate: end.toISOString().split('T')[0] };
+  };
+
+  // Fetch Jibble people + match by email
+  const fetchPeople = async () => {
+    try {
+      const res = await fetch('/api/jibble/people');
+      if (!res.ok) throw new Error('Failed to fetch Jibble people');
+      const data = await res.json();
+      setJibblePeople(data.people || []);
+
+      // Match current user by email
+      const match = (data.people || []).find(p =>
+        p.email?.toLowerCase() === currentUser.email?.toLowerCase()
+      );
+      if (match) setMyJibbleId(match.id);
+      return data.people || [];
+    } catch (err) {
+      console.error(err);
+      setError(err.message);
+      return [];
+    }
+  };
+
+  // Fetch today's time entries
+  const fetchTodayEntries = async (people) => {
+    try {
+      const res = await fetch(`/api/jibble/time-entries?date=${today}`);
+      if (!res.ok) throw new Error('Failed to fetch entries');
+      const data = await res.json();
+      const entries = data.value || data || [];
+      setTodayEntries(entries);
+
+      // Determine if current user is clocked in
+      const myMatch = people.find(p => p.email?.toLowerCase() === currentUser.email?.toLowerCase());
+      if (myMatch) {
+        const myEntry = entries.find(e => e.personId === myMatch.id);
+        if (myEntry) {
+          setIsClockedIn(myEntry.type === 'In' || (myEntry.clockIn && !myEntry.clockOut));
+          if (myEntry.clockIn) setClockInTime(myEntry.clockIn);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Fetch timesheets
+  const fetchTimesheets = async (people) => {
+    try {
+      const { startDate, endDate } = getDateRange();
+      let url = `/api/jibble/timesheets?startDate=${startDate}&endDate=${endDate}&period=Day`;
+
+      if (!isAdmin && people.length > 0) {
+        const me = people.find(p => p.email?.toLowerCase() === currentUser.email?.toLowerCase());
+        if (me) url += `&personIds=${me.id}`;
+      } else if (isAdmin && selectedEmployee !== 'all') {
+        url += `&personIds=${selectedEmployee}`;
+      }
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to fetch timesheets');
+      const data = await res.json();
+      setTimesheets(data.value || data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const people = await fetchPeople();
+      await Promise.all([fetchTodayEntries(people), fetchTimesheets(people)]);
+      setLoading(false);
+    })();
+  }, []);
+
+  // Refetch timesheets on filter change
+  useEffect(() => {
+    if (!loading) fetchTimesheets(jibblePeople);
+  }, [dateRange, selectedEmployee]);
+
+  // Clock In
+  const handleClockIn = async () => {
+    if (!myJibbleId) {
+      showToast('Your email is not linked to a Jibble account. Ask admin to verify.', 'error');
+      return;
+    }
+    setClockLoading(true);
+    try {
+      const res = await fetch('/api/jibble/clock-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personId: myJibbleId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Clock in failed');
+      setIsClockedIn(true);
+      setClockInTime(new Date().toISOString());
+      showToast('Clocked in successfully!');
+      await fetchTodayEntries(jibblePeople);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+    setClockLoading(false);
+  };
+
+  // Clock Out
+  const handleClockOut = async () => {
+    if (!myJibbleId) return;
+    setClockLoading(true);
+    try {
+      const res = await fetch('/api/jibble/clock-out', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personId: myJibbleId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Clock out failed');
+      setIsClockedIn(false);
+      showToast('Clocked out successfully!');
+      await fetchTodayEntries(jibblePeople);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+    setClockLoading(false);
+  };
+
+  // Helper: format duration (seconds → h m)
+  const formatDuration = (seconds) => {
+    if (!seconds) return '—';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+
+  // Helper: format time
+  const formatTime = (iso) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Get Jibble person name by ID
+  const getJibbleName = (personId) => {
+    const p = jibblePeople.find(j => j.id === personId);
+    return p?.name || 'Unknown';
+  };
+
+  // Map Jibble person to Pocket Fund employee
+  const getLinkedEmployee = (jibblePerson) => {
+    return employees.find(e => e.email?.toLowerCase() === jibblePerson?.email?.toLowerCase());
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 text-violet-600 animate-spin mx-auto mb-3" />
+          <p className="text-slate-500">Connecting to Jibble...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={24} className="text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-red-900">Jibble Connection Failed</h3>
+              <p className="text-sm text-red-700 mt-1">{error}</p>
+              <p className="text-sm text-red-600 mt-3">Make sure your Jibble API credentials are set in Vercel environment variables:</p>
+              <div className="mt-2 p-3 bg-red-100 rounded-xl font-mono text-xs text-red-800">
+                JIBBLE_CLIENT_ID=your_client_id<br />
+                JIBBLE_CLIENT_SECRET=your_client_secret
+              </div>
+              <button onClick={() => { setError(null); setLoading(true); fetchPeople().then(p => { fetchTodayEntries(p); fetchTimesheets(p); setLoading(false); }); }} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700">
+                Retry Connection
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Attendance</h2>
+          <p className="text-sm text-slate-500 mt-1">Powered by Jibble · {jibblePeople.length} team members linked</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Live clock */}
+          <div className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-mono">
+            {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </div>
+        </div>
+      </div>
+
+      {/* Clock In/Out Card (Employee) */}
+      {!isAdmin && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${
+                  isClockedIn ? 'bg-emerald-100' : 'bg-slate-100'
+                }`}>
+                  <Clock size={32} className={isClockedIn ? 'text-emerald-600' : 'text-slate-400'} />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Today's Status</p>
+                  <p className={`text-2xl font-bold ${isClockedIn ? 'text-emerald-700' : 'text-slate-600'}`}>
+                    {isClockedIn ? 'Clocked In' : 'Not Clocked In'}
+                  </p>
+                  {clockInTime && (
+                    <p className="text-xs text-slate-400 mt-0.5">Since {formatTime(clockInTime)}</p>
+                  )}
+                  {!myJibbleId && (
+                    <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                      <AlertTriangle size={12} /> Your email isn't linked to Jibble. Contact admin.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={isClockedIn ? handleClockOut : handleClockIn}
+                disabled={clockLoading || !myJibbleId}
+                className={`px-8 py-4 rounded-2xl text-lg font-bold transition-all flex items-center gap-3 disabled:opacity-50 ${
+                  isClockedIn
+                    ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/30'
+                    : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/30'
+                }`}
+              >
+                {clockLoading ? (
+                  <RefreshCw size={24} className="animate-spin" />
+                ) : isClockedIn ? (
+                  <><LogOut size={24} /> Clock Out</>
+                ) : (
+                  <><CheckCircle2 size={24} /> Clock In</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin: Today's Team Overview */}
+      {isAdmin && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100">
+            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <Users size={18} className="text-violet-600" /> Today's Attendance
+            </h3>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {jibblePeople.length === 0 ? (
+              <div className="p-6 text-center text-slate-400 text-sm">No Jibble team members found</div>
+            ) : jibblePeople.map(person => {
+              const entry = todayEntries.find(e => e.personId === person.id);
+              const linkedEmp = getLinkedEmployee(person);
+              const isIn = entry && (entry.type === 'In' || (entry.clockIn && !entry.clockOut));
+              return (
+                <div key={person.id} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50">
+                  <div className={`w-3 h-3 rounded-full flex-shrink-0 ${isIn ? 'bg-emerald-500' : entry?.clockOut ? 'bg-amber-400' : 'bg-slate-300'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">{person.name}</p>
+                    <p className="text-xs text-slate-400">{person.email}{linkedEmp ? ` · ${linkedEmp.dept || 'No dept'}` : ''}</p>
+                  </div>
+                  <div className="text-right">
+                    {entry?.clockIn && (
+                      <p className="text-xs text-slate-500">In: {formatTime(entry.clockIn)}</p>
+                    )}
+                    {entry?.clockOut && (
+                      <p className="text-xs text-slate-400">Out: {formatTime(entry.clockOut)}</p>
+                    )}
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                    isIn ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                    entry?.clockOut ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                    'bg-slate-100 text-slate-500 border-slate-200'
+                  }`}>
+                    {isIn ? 'Working' : entry?.clockOut ? 'Left' : 'Absent'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex gap-4">
+            <span className="text-xs text-slate-500">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1" /> Working: {todayEntries.filter(e => e.type === 'In' || (e.clockIn && !e.clockOut)).length}
+            </span>
+            <span className="text-xs text-slate-500">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1" /> Left: {todayEntries.filter(e => e.clockOut).length}
+            </span>
+            <span className="text-xs text-slate-500">
+              <span className="inline-block w-2 h-2 rounded-full bg-slate-300 mr-1" /> Absent: {jibblePeople.length - todayEntries.length}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Timesheet History */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+          <h3 className="font-bold text-slate-900">Timesheet Summary</h3>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <select
+                value={selectedEmployee}
+                onChange={(e) => setSelectedEmployee(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+              >
+                <option value="all">All Members</option>
+                {jibblePeople.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+            <div className="flex bg-slate-100 rounded-xl p-0.5">
+              {[
+                { key: 'today', label: 'Today' },
+                { key: 'week', label: '7 Days' },
+                { key: 'month', label: '30 Days' },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  onClick={() => setDateRange(opt.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    dateRange === opt.key ? 'bg-white text-violet-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => fetchTimesheets(jibblePeople)}
+              className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw size={16} className="text-slate-400" />
+            </button>
+          </div>
+        </div>
+
+        {timesheets.length === 0 ? (
+          <div className="p-10 text-center">
+            <Clock size={40} className="text-slate-200 mx-auto mb-3" />
+            <p className="text-slate-400 text-sm">No timesheet data for this period</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-slate-50">
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Date</th>
+                  {isAdmin && <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Name</th>}
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">First In</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Last Out</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Total Hours</th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {timesheets.map((entry, idx) => {
+                  const totalSec = entry.payrollHours || entry.regularHours || entry.trackedHours || 0;
+                  const isGoodDay = totalSec >= 28800; // 8 hours
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="px-5 py-3">
+                        <p className="text-sm font-medium text-slate-800">{entry.date ? new Date(entry.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : '—'}</p>
+                      </td>
+                      {isAdmin && (
+                        <td className="px-5 py-3 text-sm text-slate-600">{entry.personName || getJibbleName(entry.personId)}</td>
+                      )}
+                      <td className="px-5 py-3 text-sm text-slate-600">{formatTime(entry.firstClockIn || entry.clockIn)}</td>
+                      <td className="px-5 py-3 text-sm text-slate-600">{formatTime(entry.lastClockOut || entry.clockOut)}</td>
+                      <td className="px-5 py-3">
+                        <span className={`text-sm font-semibold ${isGoodDay ? 'text-emerald-700' : 'text-amber-700'}`}>
+                          {formatDuration(totalSec)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                          isGoodDay ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {isGoodDay ? 'Full Day' : totalSec > 0 ? 'Partial' : 'Absent'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Jibble Link Info */}
+      <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+            <Wifi size={16} className="text-violet-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-700">Connected to Jibble</p>
+            <p className="text-xs text-slate-400">{jibblePeople.length} team members · {myJibbleId ? 'Your account linked' : 'Your account not linked'}</p>
+          </div>
+        </div>
+        {!myJibbleId && (
+          <span className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">
+            Email mismatch — ask admin to add your email ({currentUser.email}) in Jibble
+          </span>
         )}
       </div>
     </div>
