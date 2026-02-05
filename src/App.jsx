@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { Bell, Search, Plus, Filter, Clock, AlertCircle, CheckCircle2, MessageSquare, Calendar, Users, TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Send, X, ChevronDown, LogOut, User, Settings, Paperclip, Eye, EyeOff, RefreshCw, Trash2, Edit3, Check, AlertTriangle, Home, FileText, BarChart3, UserCheck, Mail, Lock, Megaphone, BellRing, Pin, Archive, Volume2, VolumeX, Moon, Sun, Palette, Shield, ChevronRight, Star, Globe, Briefcase, Wallet, IndianRupee, CircleDot, Wifi, WifiOff } from 'lucide-react';
+import { Bell, Search, Plus, Filter, Clock, AlertCircle, CheckCircle2, MessageSquare, Calendar, Users, TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Send, X, ChevronDown, LogOut, User, Settings, Paperclip, Eye, EyeOff, RefreshCw, Trash2, Edit3, Check, AlertTriangle, Home, FileText, BarChart3, UserCheck, Mail, Lock, Megaphone, BellRing, Pin, Archive, Volume2, VolumeX, Moon, Sun, Palette, Shield, ChevronRight, Star, Globe, Briefcase, Wallet, IndianRupee, CircleDot, Wifi, WifiOff, Sparkles, Bot, MessageCircle } from 'lucide-react';
 import { storage } from './lib/supabase';
 
 // ============ UTILITY FUNCTIONS ============
@@ -119,7 +119,50 @@ const getMonthOptions = () => {
   return months;
 };
 
-// ============ COMPONENTS ============
+// ============ AI HELPER ============
+const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
+
+const POCKET_FUND_LEAVE_POLICY = `
+Pocket Fund Leave Policy:
+- Personal Leave: 1 per month. For weddings, family emergencies, important matters only.
+- Sick Leave: 1 per month. Onsite employees switch to WFH. Remote employees get half day. Full day requires doctor's note.
+- Exam Leave: As needed. Requires proof of exam.
+- Unpaid Leave: Available anytime. No limit.
+- Emergency Leave: Case by case. Needs founder approval.
+Rules:
+- Request leave 24 hours in advance via email or Slack.
+- No phone or WhatsApp approvals accepted.
+- Leave balances reset at end of each month. No carry forward.
+- Working hours: 10 AM - 6 PM IST for onsite, flexible for remote with core hours 11 AM - 4 PM.
+`;
+
+const callClaude = async (systemPrompt, userMessage) => {
+  if (!ANTHROPIC_API_KEY) {
+    return 'AI features require an Anthropic API key. Add VITE_ANTHROPIC_API_KEY to your .env file.';
+  }
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+      }),
+    });
+    const data = await res.json();
+    return data.content?.map(b => b.text || '').join('\n') || 'No response.';
+  } catch (e) {
+    console.error('Claude API error:', e);
+    return 'AI is temporarily unavailable. Please try again.';
+  }
+};
 
 // Status Badge Component
 const StatusBadge = ({ status, size = 'md' }) => {
@@ -275,6 +318,7 @@ export default function PocketFundDashboard() {
   const [announcements, setAnnouncements] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [salaryRecords, setSalaryRecords] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
@@ -292,6 +336,9 @@ export default function PocketFundDashboard() {
   const [showFilters, setShowFilters] = useState(false);
   const [showNewAnnouncementModal, setShowNewAnnouncementModal] = useState(false);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
+  const [showAIChat, setShowAIChat] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showNewSuggestionModal, setShowNewSuggestionModal] = useState(false);
 
   // Load data from storage
   useEffect(() => {
@@ -302,7 +349,7 @@ export default function PocketFundDashboard() {
         const forceReset = false;
         
         // Data version - bump this to force a reset when schema changes
-        const DATA_VERSION = '6';
+        const DATA_VERSION = '7';
         let versionResult;
         try {
           versionResult = await storage.get('pocketfund-version');
@@ -320,6 +367,7 @@ export default function PocketFundDashboard() {
           await storage.set('pocketfund-announcements', JSON.stringify([]));
           await storage.set('pocketfund-notifications', JSON.stringify([]));
           await storage.set('pocketfund-salary', JSON.stringify([]));
+          await storage.set('pocketfund-suggestions', JSON.stringify([]));
           await storage.set('pocketfund-version', DATA_VERSION);
           try { await storage.delete('pocketfund-currentuser'); } catch(e) {}
           
@@ -330,6 +378,7 @@ export default function PocketFundDashboard() {
           setAnnouncements([]);
           setNotifications([]);
           setSalaryRecords([]);
+          setSuggestions([]);
           setIsLoading(false);
           return;
         }
@@ -438,6 +487,20 @@ export default function PocketFundDashboard() {
           await storage.set('pocketfund-salary', JSON.stringify(initialSalary));
         }
 
+        // Load suggestions
+        let suggestionsResult;
+        try {
+          suggestionsResult = await storage.get('pocketfund-suggestions');
+        } catch (e) {
+          suggestionsResult = null;
+        }
+        if (suggestionsResult?.value) {
+          setSuggestions(JSON.parse(suggestionsResult.value));
+        } else {
+          setSuggestions([]);
+          await storage.set('pocketfund-suggestions', JSON.stringify([]));
+        }
+
         // Load current user preference
         let userResult;
         try {
@@ -461,7 +524,7 @@ export default function PocketFundDashboard() {
   const refreshData = useCallback(async (silent = true) => {
     if (!silent) setIsSyncing(true);
     try {
-      const [empR, tktR, lvR, actR, annR, ntfR, salR] = await Promise.all([
+      const [empR, tktR, lvR, actR, annR, ntfR, salR, sugR] = await Promise.all([
         storage.get('pocketfund-employees'),
         storage.get('pocketfund-tickets'),
         storage.get('pocketfund-leaves'),
@@ -469,6 +532,7 @@ export default function PocketFundDashboard() {
         storage.get('pocketfund-announcements'),
         storage.get('pocketfund-notifications'),
         storage.get('pocketfund-salary'),
+        storage.get('pocketfund-suggestions'),
       ]);
       if (empR?.value) setEmployees(JSON.parse(empR.value));
       if (tktR?.value) setTickets(JSON.parse(tktR.value));
@@ -477,6 +541,7 @@ export default function PocketFundDashboard() {
       if (annR?.value) setAnnouncements(JSON.parse(annR.value));
       if (ntfR?.value) setNotifications(JSON.parse(ntfR.value));
       if (salR?.value) setSalaryRecords(JSON.parse(salR.value));
+      if (sugR?.value) setSuggestions(JSON.parse(sugR.value));
       setLastSynced(new Date());
     } catch (e) {
       console.error('Sync failed:', e);
@@ -534,6 +599,12 @@ export default function PocketFundDashboard() {
   const saveSalaryRecords = async (newRecords) => {
     setSalaryRecords(newRecords);
     await storage.set('pocketfund-salary', JSON.stringify(newRecords));
+  };
+
+  // Save suggestions
+  const saveSuggestions = async (newSuggestions) => {
+    setSuggestions(newSuggestions);
+    await storage.set('pocketfund-suggestions', JSON.stringify(newSuggestions));
   };
 
   // Add notification helper
@@ -782,6 +853,44 @@ export default function PocketFundDashboard() {
     showToast('Profile updated!');
   };
 
+  // Add new team member (admin only)
+  const handleAddEmployee = async (memberData) => {
+    const newId = `EMP-${String(employees.length).padStart(3, '0')}`;
+    const newEmployee = {
+      id: newId,
+      name: memberData.name,
+      email: memberData.email,
+      passcode: memberData.passcode,
+      dept: memberData.dept || '',
+      role: memberData.role || 'employee',
+      profileComplete: false,
+      leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 },
+      settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' },
+    };
+    const newEmployees = [...employees, newEmployee];
+    await saveEmployees(newEmployees);
+    await addActivity({ type: 'member_added', by: currentUser.id, memberId: newId });
+    await addNotification({ type: 'system', title: 'New Team Member', message: `${memberData.name} has been added to the team`, forUser: 'all' });
+    setShowAddMemberModal(false);
+    showToast(`${memberData.name} added successfully!`);
+  };
+
+  // Remove team member (admin only)
+  const handleRemoveEmployee = async (employeeId) => {
+    const emp = getEmployee(employeeId);
+    if (!emp) return;
+    if (!confirm(`Are you sure you want to remove ${emp.name}? This will revoke their access permanently.`)) return;
+    const newEmployees = employees.filter(e => e.id !== employeeId);
+    await saveEmployees(newEmployees);
+    // Clean up related data
+    const newTickets = tickets.filter(t => t.employeeId !== employeeId);
+    await saveTickets(newTickets);
+    const newLeaves = leaves.filter(l => l.employeeId !== employeeId);
+    await saveLeaves(newLeaves);
+    await addActivity({ type: 'member_removed', by: currentUser.id, memberName: emp.name });
+    showToast(`${emp.name} has been removed`);
+  };
+
   // Update salary/stipend status (admin only)
   const handleUpdateSalaryStatus = async ({ employeeIds, month, status, note }) => {
     const now = Date.now();
@@ -827,6 +936,47 @@ export default function PocketFundDashboard() {
     return salaryRecords.find(r => r.userId === userId && r.month === month) || null;
   };
 
+  // Create anonymous suggestion (NO identity stored)
+  const handleCreateSuggestion = async (suggestionData) => {
+    const newSuggestion = {
+      id: generateId('SUG'),
+      title: suggestionData.title,
+      body: suggestionData.body,
+      category: suggestionData.category || 'General',
+      status: 'New',
+      createdAt: Date.now(),
+      adminResponse: null,
+      respondedAt: null,
+      // NOTE: No employeeId, no name, no dept — fully anonymous
+    };
+    const newSuggestions = [newSuggestion, ...suggestions];
+    await saveSuggestions(newSuggestions);
+    await addActivity({ type: 'suggestion_created', by: 'anonymous' });
+    await addNotification({ type: 'system', title: 'New Anonymous Suggestion', message: `Someone submitted a suggestion: "${suggestionData.title}"`, forUser: 'all' });
+    setShowNewSuggestionModal(false);
+    showToast('Suggestion submitted anonymously!');
+  };
+
+  // Update suggestion status / respond (admin only)
+  const handleUpdateSuggestion = async (suggestionId, updates) => {
+    const newSuggestions = suggestions.map(s => {
+      if (s.id === suggestionId) {
+        return { ...s, ...updates, respondedAt: updates.adminResponse ? Date.now() : s.respondedAt };
+      }
+      return s;
+    });
+    await saveSuggestions(newSuggestions);
+    showToast('Suggestion updated!');
+  };
+
+  // Delete suggestion (admin only)
+  const handleDeleteSuggestion = async (suggestionId) => {
+    if (!confirm('Delete this suggestion permanently?')) return;
+    const newSuggestions = suggestions.filter(s => s.id !== suggestionId);
+    await saveSuggestions(newSuggestions);
+    showToast('Suggestion deleted');
+  };
+
   // Reset all data
   const handleResetData = async () => {
     if (confirm('Are you sure you want to reset all data? This cannot be undone.')) {
@@ -840,6 +990,7 @@ export default function PocketFundDashboard() {
       await saveAnnouncements([]);
       await saveNotifications([]);
       await saveSalaryRecords([]);
+      await saveSuggestions([]);
       // Log out since employee records are reset
       setCurrentUser(null);
       try { await storage.delete('pocketfund-currentuser'); } catch(e) {}
@@ -1008,6 +1159,7 @@ export default function PocketFundDashboard() {
               { id: 'leaves', name: 'Leave Requests', icon: Calendar },
               { id: 'salary', name: 'Salary Status', icon: Wallet },
               { id: 'announcements', name: 'Announcements', icon: Megaphone },
+              { id: 'suggestions', name: 'Suggestions', icon: MessageCircle },
               ...(isAdmin ? [
                 { id: 'team', name: 'Team Members', icon: Users },
                 { id: 'analytics', name: 'Analytics', icon: BarChart3 }
@@ -1036,6 +1188,9 @@ export default function PocketFundDashboard() {
                 {item.id === 'announcements' && announcements.filter(a => !a.archived && a.pinned).length > 0 && (
                   <span className="ml-auto bg-rose-500 text-white text-xs px-2 py-0.5 rounded-full">{announcements.filter(a => !a.archived && a.pinned).length}</span>
                 )}
+                {item.id === 'suggestions' && isAdmin && suggestions.filter(s => s.status === 'New').length > 0 && (
+                  <span className="ml-auto bg-teal-500 text-white text-xs px-2 py-0.5 rounded-full">{suggestions.filter(s => s.status === 'New').length}</span>
+                )}
               </button>
             ))}
           </div>
@@ -1051,22 +1206,13 @@ export default function PocketFundDashboard() {
               <p className="text-xs text-slate-400 capitalize">{currentUser.role === 'hr' ? 'HR Team' : currentUser.role}</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleResetData}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm text-slate-300 transition-colors"
-            >
-              <RefreshCw size={14} />
-              Reset
-            </button>
-            <button
-              onClick={handleLogout}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm text-slate-300 transition-colors"
-            >
-              <LogOut size={14} />
-              Logout
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm text-slate-300 transition-colors"
+          >
+            <LogOut size={14} />
+            Logout
+          </button>
         </div>
       </aside>
 
@@ -1094,6 +1240,19 @@ export default function PocketFundDashboard() {
                   className="pl-10 pr-4 py-2.5 bg-slate-50 border-0 rounded-xl w-72 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:bg-white transition-all"
                 />
               </div>
+              {/* AI Chat Toggle */}
+              <button
+                onClick={() => setShowAIChat(prev => !prev)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                  showAIChat 
+                    ? 'bg-violet-100 text-violet-700 ring-2 ring-violet-200' 
+                    : 'bg-gradient-to-r from-violet-50 to-purple-50 text-violet-600 hover:from-violet-100 hover:to-purple-100 border border-violet-200'
+                }`}
+                title="AI Leave Policy Assistant"
+              >
+                <Sparkles size={15} />
+                <span className="hidden lg:inline">AI Help</span>
+              </button>
               {/* Sync Indicator */}
               <button
                 onClick={() => refreshData(false)}
@@ -1769,62 +1928,176 @@ export default function PocketFundDashboard() {
 
           {/* Team Members Tab (Admin only) */}
           {activeTab === 'team' && isAdmin && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between p-5 border-b border-slate-100">
+            <div className="space-y-6">
+              {/* Header with Add button */}
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-bold text-slate-900">Team Members</h3>
-                  <p className="text-sm text-slate-500 mt-1">
-                    {employees.filter(e => e.role === 'employee').length} employees registered
+                  <p className="text-sm text-slate-500">
+                    {employees.filter(e => e.role !== 'admin').length} members · {employees.filter(e => e.role === 'admin').length} admin
                   </p>
                 </div>
+                <button
+                  onClick={() => setShowAddMemberModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 transition-colors"
+                >
+                  <Plus size={18} />
+                  Add Member
+                </button>
               </div>
 
-              {employees.filter(e => e.role === 'employee').length === 0 ? (
-                <EmptyState
-                  icon={Users}
-                  title="No team members yet"
-                  description="Employees will appear here once they sign up using their Pocket Fund email."
-                />
-              ) : (
+              {/* Admin(s) Section */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-purple-50">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <Shield size={16} className="text-violet-600" />
+                    Admins
+                  </h3>
+                </div>
                 <div className="divide-y divide-slate-100">
-                  {employees.filter(e => e.role === 'employee').map(employee => (
-                    <div key={employee.id} className="p-5 hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-100 to-purple-100 flex items-center justify-center">
-                            <span className="font-semibold text-violet-600">
-                              {employee.name.split(' ').map(n => n[0]).join('')}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-900">{employee.name}</p>
-                            <p className="text-sm text-slate-500">{employee.email}</p>
-                          </div>
+                  {employees.filter(e => e.role === 'admin').map(emp => (
+                    <div key={emp.id} className="px-5 py-4 flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                          <span className="font-semibold text-white text-sm">{emp.name.split(' ').map(n => n[0]).join('')}</span>
                         </div>
-                        <div className="text-right">
-                          <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-medium">
-                            {employee.dept}
-                          </span>
-                          <div className="mt-2 text-xs text-slate-400">
-                            ID: {employee.id}
-                          </div>
+                        <div>
+                          <p className="font-semibold text-slate-900 text-sm">{emp.name}</p>
+                          <p className="text-xs text-slate-500">{emp.email}</p>
                         </div>
                       </div>
-                      <div className="mt-4 pt-4 border-t border-slate-100">
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Monthly Leave Balance</p>
-                        <div className="flex flex-wrap gap-3">
-                          <span className="text-xs text-slate-600">
-                            Personal: <strong>{employee.leaveBalance?.personal ?? 1}</strong>
-                          </span>
-                          <span className="text-xs text-slate-600">
-                            Sick: <strong>{employee.leaveBalance?.sick ?? 1}</strong>
-                          </span>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="text-xs text-slate-400">Passcode</p>
+                          <p className="text-sm font-mono font-bold text-slate-700 tracking-wider">{emp.passcode}</p>
                         </div>
+                        <span className="px-2.5 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-semibold">Admin</span>
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
+              </div>
+
+              {/* Employees Section */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-100">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <Users size={16} className="text-slate-600" />
+                    Team Members ({employees.filter(e => e.role !== 'admin').length})
+                  </h3>
+                </div>
+
+                {employees.filter(e => e.role !== 'admin').length === 0 ? (
+                  <EmptyState
+                    icon={Users}
+                    title="No team members yet"
+                    description="Click 'Add Member' to invite employees to the dashboard."
+                    action={
+                      <button
+                        onClick={() => setShowAddMemberModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 transition-colors"
+                      >
+                        <Plus size={16} />
+                        Add First Member
+                      </button>
+                    }
+                  />
+                ) : (
+                  <>
+                    {/* Table Header */}
+                    <div className="hidden md:grid grid-cols-12 gap-4 px-5 py-3 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      <div className="col-span-3">Name</div>
+                      <div className="col-span-3">Email</div>
+                      <div className="col-span-1">Dept</div>
+                      <div className="col-span-1">Passcode</div>
+                      <div className="col-span-1">Status</div>
+                      <div className="col-span-2">ID</div>
+                      <div className="col-span-1 text-right">Action</div>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                      {employees.filter(e => e.role !== 'admin').map(emp => (
+                        <div key={emp.id} className="px-5 py-4 hover:bg-slate-50 transition-colors group">
+                          <div className="hidden md:grid grid-cols-12 gap-4 items-center">
+                            {/* Name + Avatar */}
+                            <div className="col-span-3 flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center flex-shrink-0">
+                                <span className="font-semibold text-slate-600 text-xs">{emp.name.split(' ').map(n => n[0]).join('')}</span>
+                              </div>
+                              <span className="font-medium text-slate-900 text-sm truncate">{emp.name}</span>
+                            </div>
+                            {/* Email */}
+                            <div className="col-span-3">
+                              <span className="text-sm text-slate-600 truncate block">{emp.email}</span>
+                            </div>
+                            {/* Dept */}
+                            <div className="col-span-1">
+                              <span className="text-xs text-slate-500">{emp.dept || '—'}</span>
+                            </div>
+                            {/* Passcode */}
+                            <div className="col-span-1">
+                              <span className="font-mono text-sm font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-md tracking-wider">{emp.passcode}</span>
+                            </div>
+                            {/* Profile Status */}
+                            <div className="col-span-1">
+                              {emp.profileComplete ? (
+                                <span className="flex items-center gap-1 text-emerald-600 text-xs font-medium">
+                                  <CheckCircle2 size={13} /> Active
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-amber-600 text-xs font-medium">
+                                  <Clock size={13} /> Pending
+                                </span>
+                              )}
+                            </div>
+                            {/* ID */}
+                            <div className="col-span-2">
+                              <span className="text-xs text-slate-400 font-mono">{emp.id}</span>
+                            </div>
+                            {/* Remove Button */}
+                            <div className="col-span-1 text-right">
+                              <button
+                                onClick={() => handleRemoveEmployee(emp.id)}
+                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                title="Remove member"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                          {/* Mobile layout */}
+                          <div className="md:hidden">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
+                                  <span className="font-semibold text-slate-600 text-sm">{emp.name.split(' ').map(n => n[0]).join('')}</span>
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-slate-900 text-sm">{emp.name}</p>
+                                  <p className="text-xs text-slate-500">{emp.email}</p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleRemoveEmployee(emp.id)}
+                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                            <div className="mt-3 flex items-center gap-4 pl-13">
+                              <span className="font-mono text-sm font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-md tracking-wider">{emp.passcode}</span>
+                              <span className="text-xs text-slate-400">{emp.dept || 'No dept'}</span>
+                              {emp.profileComplete ? (
+                                <span className="text-emerald-600 text-xs font-medium">Active</span>
+                              ) : (
+                                <span className="text-amber-600 text-xs font-medium">Pending setup</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -2107,6 +2380,18 @@ export default function PocketFundDashboard() {
             />
           )}
 
+          {/* Anonymous Suggestions Tab */}
+          {activeTab === 'suggestions' && (
+            <SuggestionsPage
+              suggestions={suggestions}
+              currentUser={currentUser}
+              isAdmin={isAdmin}
+              onCreateSuggestion={() => setShowNewSuggestionModal(true)}
+              onUpdateSuggestion={handleUpdateSuggestion}
+              onDeleteSuggestion={handleDeleteSuggestion}
+            />
+          )}
+
           {/* Settings Tab */}
           {activeTab === 'settings' && (
             <SettingsPage
@@ -2174,6 +2459,30 @@ export default function PocketFundDashboard() {
         <NewAnnouncementForm onSubmit={handleCreateAnnouncement} onCancel={() => setShowNewAnnouncementModal(false)} />
       </Modal>
 
+      {/* Add Team Member Modal (Admin) */}
+      <Modal
+        isOpen={showAddMemberModal}
+        onClose={() => setShowAddMemberModal(false)}
+        title="Add Team Member"
+        size="md"
+      >
+        <AddMemberForm
+          employees={employees}
+          onSubmit={handleAddEmployee}
+          onCancel={() => setShowAddMemberModal(false)}
+        />
+      </Modal>
+
+      {/* New Anonymous Suggestion Modal */}
+      <Modal
+        isOpen={showNewSuggestionModal}
+        onClose={() => setShowNewSuggestionModal(false)}
+        title="Submit Anonymous Suggestion"
+        size="md"
+      >
+        <NewSuggestionForm onSubmit={handleCreateSuggestion} onCancel={() => setShowNewSuggestionModal(false)} />
+      </Modal>
+
       {/* Notification Panel */}
       <SlidePanel
         isOpen={showNotificationPanel}
@@ -2188,6 +2497,9 @@ export default function PocketFundDashboard() {
           getEmployee={getEmployee}
         />
       </SlidePanel>
+
+      {/* AI Leave Policy Chat */}
+      {showAIChat && <LeaveQABot onClose={() => setShowAIChat(false)} />}
 
       {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -2431,6 +2743,31 @@ function NewTicketForm({ onSubmit, onCancel }) {
     description: '',
   });
   const [error, setError] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiDone, setAiDone] = useState(false);
+
+  const aiCategorize = async () => {
+    if (!formData.description.trim()) return;
+    setAiLoading(true);
+    setAiDone(false);
+    const systemPrompt = `You are a ticket categorization AI for Pocket Fund HR. Given a ticket description, respond ONLY with a JSON object like: {"category":"HR","priority":"Medium","suggested_title":"Short title","type":"Complaint"}\nCategories: ${TICKET_CATEGORIES.join(', ')}\nTypes: ${TICKET_TYPES.join(', ')}\nPriorities: Low, Medium, High. Assess urgency from the description.`;
+    const result = await callClaude(systemPrompt, formData.description);
+    try {
+      const cleaned = result.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      setFormData(prev => ({
+        ...prev,
+        category: parsed.category || prev.category,
+        priority: parsed.priority || prev.priority,
+        type: parsed.type || prev.type,
+        title: prev.title || parsed.suggested_title || prev.title,
+      }));
+      setAiDone(true);
+    } catch {
+      // AI response wasn't parseable, that's fine
+    }
+    setAiLoading(false);
+  };
 
   const handleSubmit = () => {
     setError('');
@@ -2453,6 +2790,37 @@ function NewTicketForm({ onSubmit, onCancel }) {
           <span>{error}</span>
         </div>
       )}
+
+      {/* Description FIRST for AI analysis */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+        <textarea
+          value={formData.description}
+          onChange={(e) => { setFormData({ ...formData, description: e.target.value }); setAiDone(false); }}
+          placeholder="Describe your issue or suggestion in detail..."
+          rows={4}
+          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300 resize-none"
+        />
+      </div>
+
+      {/* AI Categorize Button */}
+      <button
+        type="button"
+        onClick={aiCategorize}
+        disabled={aiLoading || !formData.description.trim()}
+        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+          aiDone
+            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            : aiLoading
+            ? 'bg-violet-50 text-violet-400 border border-violet-200'
+            : formData.description.trim()
+            ? 'bg-gradient-to-r from-violet-50 to-purple-50 text-violet-700 border border-violet-200 hover:from-violet-100 hover:to-purple-100'
+            : 'bg-slate-50 text-slate-400 border border-slate-200 cursor-not-allowed'
+        }`}
+      >
+        <Sparkles size={16} />
+        {aiLoading ? 'AI analyzing...' : aiDone ? '✓ AI categorized — adjust below if needed' : 'Auto-categorize with AI'}
+      </button>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -2507,17 +2875,6 @@ function NewTicketForm({ onSubmit, onCancel }) {
           onChange={(e) => setFormData({ ...formData, title: e.target.value })}
           placeholder="Brief summary of your issue"
           className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-        <textarea
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          placeholder="Provide details about your issue or suggestion..."
-          rows={4}
-          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300 resize-none"
         />
       </div>
 
@@ -2835,6 +3192,8 @@ function TicketDetailPanel({ ticket, currentUser, employees, getEmployee, onUpda
   const [assignTo, setAssignTo] = useState(ticket.assignedTo || '');
   const [status, setStatus] = useState(ticket.status);
   const [rating, setRating] = useState(ticket.rating || 0);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const employee = getEmployee(ticket.employeeId);
 
@@ -2985,6 +3344,52 @@ function TicketDetailPanel({ ticket, currentUser, employees, getEmployee, onUpda
       {/* Comment Input */}
       {!['Closed'].includes(ticket.status) && (
         <div className="p-5 border-t border-slate-100">
+          {/* AI Smart Reply (Admin only) */}
+          {isAdmin && (
+            <div className="mb-3">
+              <button
+                type="button"
+                onClick={async () => {
+                  setAiLoading(true);
+                  setAiSuggestions([]);
+                  const systemPrompt = `You are an HR assistant for Pocket Fund, a Venture Capital firm. Generate exactly 3 professional reply suggestions for an HR support ticket. Return them as a JSON array of 3 strings. Each reply should be 1-3 sentences, professional but warm. Only return the JSON array, nothing else.`;
+                  const userMsg = `Ticket: "${ticket.title}"\nDescription: "${ticket.description}"\nCategory: ${ticket.category}\nPriority: ${ticket.priority}\nExisting comments: ${ticket.comments.map(c => c.text).join('; ') || 'None'}`;
+                  const result = await callClaude(systemPrompt, userMsg);
+                  try {
+                    const cleaned = result.replace(/```json|```/g, '').trim();
+                    const parsed = JSON.parse(cleaned);
+                    setAiSuggestions(Array.isArray(parsed) ? parsed : []);
+                  } catch {
+                    setAiSuggestions([result]);
+                  }
+                  setAiLoading(false);
+                }}
+                disabled={aiLoading}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  aiLoading
+                    ? 'bg-violet-50 text-violet-400 border border-violet-200'
+                    : 'bg-gradient-to-r from-violet-50 to-purple-50 text-violet-700 border border-violet-200 hover:from-violet-100 hover:to-purple-100'
+                }`}
+              >
+                <Sparkles size={13} />
+                {aiLoading ? 'Generating...' : 'AI Smart Reply'}
+              </button>
+              {aiSuggestions.length > 0 && (
+                <div className="mt-2 space-y-1.5">
+                  {aiSuggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { setNewComment(s); setAiSuggestions([]); }}
+                      className="w-full text-left p-2.5 bg-violet-50 hover:bg-violet-100 border border-violet-100 hover:border-violet-200 rounded-xl text-xs text-violet-800 transition-all leading-relaxed"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {isAdmin && (
             <div className="flex items-center gap-2 mb-2">
               <button
@@ -3040,6 +3445,32 @@ function NewAnnouncementForm({ onSubmit, onCancel }) {
     pinned: false,
   });
   const [error, setError] = useState('');
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiTone, setAiTone] = useState('professional');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiDraft, setShowAiDraft] = useState(false);
+
+  const generateDraft = async () => {
+    if (!aiTopic.trim()) return;
+    setAiLoading(true);
+    const systemPrompt = `You are an HR communications writer for Pocket Fund, a Venture Capital firm. Write a company announcement. Return ONLY a JSON object: {"title":"Short title","body":"Announcement body (2-4 sentences, ${aiTone} tone)","priority":"Normal","category":"General"}. No markdown, no code fences. Categories: ${ANNOUNCEMENT_CATEGORIES.join(', ')}. Priorities: ${ANNOUNCEMENT_PRIORITIES.join(', ')}.`;
+    const result = await callClaude(systemPrompt, `Topic: ${aiTopic}`);
+    try {
+      const cleaned = result.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      setFormData(prev => ({
+        ...prev,
+        title: parsed.title || prev.title,
+        body: parsed.body || prev.body,
+        priority: parsed.priority || prev.priority,
+        category: parsed.category || prev.category,
+      }));
+    } catch {
+      setFormData(prev => ({ ...prev, body: result }));
+    }
+    setAiLoading(false);
+    setShowAiDraft(false);
+  };
 
   const handleSubmit = () => {
     setError('');
@@ -3060,6 +3491,57 @@ function NewAnnouncementForm({ onSubmit, onCancel }) {
         <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 flex items-start gap-2">
           <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* AI Draft Toggle */}
+      <button
+        type="button"
+        onClick={() => setShowAiDraft(!showAiDraft)}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-violet-50 to-purple-50 text-violet-700 border border-violet-200 hover:from-violet-100 hover:to-purple-100 transition-all"
+      >
+        <Sparkles size={16} />
+        {showAiDraft ? 'Hide AI Drafter' : 'Draft with AI'}
+      </button>
+
+      {/* AI Draft Section */}
+      {showAiDraft && (
+        <div className="p-4 bg-violet-50 rounded-xl border border-violet-200 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-violet-700 mb-1">What's it about?</label>
+            <textarea
+              value={aiTopic}
+              onChange={(e) => setAiTopic(e.target.value)}
+              placeholder="e.g. Office closed next Friday for team outing..."
+              rows={2}
+              className="w-full px-3 py-2 bg-white border border-violet-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-violet-700 mb-1">Tone</label>
+            <div className="flex gap-1.5">
+              {['professional', 'friendly', 'urgent', 'celebratory'].map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setAiTone(t)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${
+                    aiTone === t ? 'bg-violet-600 text-white' : 'bg-white text-violet-600 border border-violet-200 hover:bg-violet-100'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={generateDraft}
+            disabled={aiLoading || !aiTopic.trim()}
+            className="w-full py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50"
+          >
+            {aiLoading ? '✦ Generating...' : '✦ Generate Draft'}
+          </button>
         </div>
       )}
 
@@ -3135,6 +3617,196 @@ function NewAnnouncementForm({ onSubmit, onCancel }) {
           className="flex-1 py-3 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors"
         >
           Post Announcement
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============ ADD MEMBER FORM (Admin) ============
+function AddMemberForm({ employees, onSubmit, onCancel }) {
+  const generatePasscode = () => String(Math.floor(100000 + Math.random() * 900000));
+
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    dept: '',
+    role: 'employee',
+    passcode: generatePasscode(),
+  });
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const regeneratePasscode = () => {
+    setFormData(prev => ({ ...prev, passcode: generatePasscode() }));
+    setCopied(false);
+  };
+
+  const copyPasscode = () => {
+    navigator.clipboard.writeText(formData.passcode).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSubmit = () => {
+    setError('');
+
+    if (!formData.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    if (!formData.email.trim()) {
+      setError('Email is required');
+      return;
+    }
+
+    // Check email domain
+    const emailDomain = formData.email.split('@')[1]?.toLowerCase();
+    if (!emailDomain || !ALLOWED_DOMAINS.includes(emailDomain)) {
+      setError(`Email must be from: ${ALLOWED_DOMAINS.join(' or ')}`);
+      return;
+    }
+
+    // Check duplicate email
+    if (employees.some(e => e.email.toLowerCase() === formData.email.toLowerCase().trim())) {
+      setError('This email is already registered');
+      return;
+    }
+
+    // Passcode must be 6 digits
+    if (!/^\d{6}$/.test(formData.passcode)) {
+      setError('Passcode must be exactly 6 digits');
+      return;
+    }
+
+    onSubmit(formData);
+  };
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 flex items-start gap-2">
+          <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+        <input
+          type="text"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          placeholder="e.g. Rahul Sharma"
+          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+        <input
+          type="email"
+          value={formData.email}
+          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          placeholder="name@pocket-fund.com"
+          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
+        />
+        <p className="text-xs text-slate-400 mt-1">Must be @pocket-fund.com or @pocketfund.org</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Department</label>
+          <select
+            value={formData.dept}
+            onChange={(e) => setFormData({ ...formData, dept: e.target.value })}
+            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
+          >
+            <option value="">Assign later</option>
+            {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+          <select
+            value={formData.role}
+            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
+          >
+            <option value="employee">Employee</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Passcode Section */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Login Passcode</label>
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={formData.passcode}
+              onChange={(e) => setFormData({ ...formData, passcode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+              maxLength={6}
+              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-lg tracking-[0.3em] text-center focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={regeneratePasscode}
+            className="px-3 py-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
+            title="Generate new passcode"
+          >
+            <RefreshCw size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={copyPasscode}
+            className={`px-3 py-2.5 rounded-xl transition-colors text-sm font-medium ${
+              copied
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+            }`}
+          >
+            {copied ? <Check size={18} /> : 'Copy'}
+          </button>
+        </div>
+        <p className="text-xs text-slate-400 mt-1.5">
+          Share this passcode privately with the member. They'll use it to log in.
+        </p>
+      </div>
+
+      {/* Preview Card */}
+      {formData.name && formData.email && (
+        <div className="p-4 bg-violet-50 border border-violet-200 rounded-xl">
+          <p className="text-xs font-semibold text-violet-600 uppercase tracking-wider mb-2">Preview</p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-200 to-purple-200 flex items-center justify-center">
+              <span className="font-semibold text-violet-700 text-sm">{formData.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</span>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-violet-900">{formData.name}</p>
+              <p className="text-xs text-violet-600">{formData.email} · Passcode: <span className="font-mono font-bold">{formData.passcode}</span></p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-3 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          className="flex-1 py-3 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors"
+        >
+          Add Member
         </button>
       </div>
     </div>
@@ -4003,6 +4675,440 @@ function SalaryStatusPage({ currentUser, employees, salaryRecords, getSalaryReco
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ AI LEAVE POLICY CHATBOT ============
+// ============ ANONYMOUS SUGGESTION FORM ============
+const SUGGESTION_CATEGORIES = ['General', 'Work Culture', 'Management', 'Tools & Tech', 'HR & Policies', 'Events & Fun', 'Other'];
+
+function NewSuggestionForm({ onSubmit, onCancel }) {
+  const [form, setForm] = useState({ title: '', body: '', category: 'General' });
+  const [error, setError] = useState('');
+
+  const handleSubmit = () => {
+    setError('');
+    if (!form.title.trim()) { setError('Please add a short title'); return; }
+    if (!form.body.trim()) { setError('Please describe your suggestion'); return; }
+    if (form.body.trim().length < 10) { setError('Please write at least 10 characters'); return; }
+    onSubmit({ title: form.title.trim(), body: form.body.trim(), category: form.category });
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Anonymity Notice */}
+      <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl flex items-start gap-3">
+        <Shield size={20} className="text-teal-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-teal-800">100% Anonymous</p>
+          <p className="text-xs text-teal-600 mt-0.5">Your identity is never stored or shared. Admin will only see the suggestion text — not who wrote it.</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 flex items-start gap-2">
+          <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
+        <input
+          type="text"
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          placeholder="Brief summary of your suggestion"
+          maxLength={100}
+          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+        <select
+          value={form.category}
+          onChange={(e) => setForm({ ...form, category: e.target.value })}
+          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300"
+        >
+          {SUGGESTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Your Suggestion</label>
+        <textarea
+          value={form.body}
+          onChange={(e) => setForm({ ...form, body: e.target.value })}
+          placeholder="Describe your suggestion, idea, or feedback in detail..."
+          rows={5}
+          maxLength={2000}
+          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 resize-none"
+        />
+        <p className="text-xs text-slate-400 mt-1">{form.body.length}/2000</p>
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <button
+          onClick={onCancel}
+          className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-200 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          className="flex-1 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2"
+        >
+          <Send size={16} />
+          Submit Anonymously
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============ SUGGESTIONS PAGE ============
+const SUGGESTION_STATUSES = ['New', 'Acknowledged', 'Under Review', 'Implemented', 'Declined'];
+const SUGGESTION_STATUS_STYLES = {
+  'New': 'bg-blue-50 text-blue-700 border-blue-200',
+  'Acknowledged': 'bg-violet-50 text-violet-700 border-violet-200',
+  'Under Review': 'bg-amber-50 text-amber-700 border-amber-200',
+  'Implemented': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Declined': 'bg-slate-100 text-slate-500 border-slate-200',
+};
+
+function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion, onUpdateSuggestion, onDeleteSuggestion }) {
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [respondingTo, setRespondingTo] = useState(null);
+  const [responseText, setResponseText] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+
+  const filtered = useMemo(() => {
+    let result = [...suggestions];
+    if (filterStatus !== 'all') result = result.filter(s => s.status === filterStatus);
+    if (filterCategory !== 'all') result = result.filter(s => s.category === filterCategory);
+    return result.sort((a, b) => b.createdAt - a.createdAt);
+  }, [suggestions, filterStatus, filterCategory]);
+
+  const handleRespond = async (suggestionId) => {
+    const updates = {};
+    if (selectedStatus) updates.status = selectedStatus;
+    if (responseText.trim()) updates.adminResponse = responseText.trim();
+    if (Object.keys(updates).length === 0) return;
+    await onUpdateSuggestion(suggestionId, updates);
+    setRespondingTo(null);
+    setResponseText('');
+    setSelectedStatus('');
+  };
+
+  const statusCounts = useMemo(() => {
+    const counts = {};
+    SUGGESTION_STATUSES.forEach(s => { counts[s] = suggestions.filter(sg => sg.status === s).length; });
+    return counts;
+  }, [suggestions]);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <div className="p-2 bg-teal-50 rounded-xl">
+              <MessageCircle size={20} className="text-teal-600" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900">Anonymous Suggestions</h3>
+          </div>
+          <p className="text-sm text-slate-500 ml-12">
+            {isAdmin
+              ? 'Review suggestions from your team. Identities are never recorded.'
+              : 'Share feedback, ideas, or suggestions anonymously. Your identity is never stored.'}
+          </p>
+        </div>
+        {!isAdmin && (
+          <button
+            onClick={onCreateSuggestion}
+            className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors"
+          >
+            <Plus size={18} />
+            New Suggestion
+          </button>
+        )}
+      </div>
+
+      {/* Stats (Admin view) */}
+      {isAdmin && suggestions.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {SUGGESTION_STATUSES.map(s => (
+            statusCounts[s] > 0 && (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(filterStatus === s ? 'all' : s)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
+                  filterStatus === s ? 'ring-2 ring-offset-1 ring-teal-300' : ''
+                } ${SUGGESTION_STATUS_STYLES[s]}`}
+              >
+                {s}: {statusCounts[s]}
+              </button>
+            )
+          ))}
+          {filterStatus !== 'all' && (
+            <button onClick={() => setFilterStatus('all')} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700">
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Filter by category */}
+      {suggestions.length > 0 && (
+        <div className="flex items-center gap-2">
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+          >
+            <option value="all">All Categories</option>
+            {SUGGESTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Anonymity Banner (Employees) */}
+      {!isAdmin && (
+        <div className="p-4 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-100 rounded-2xl flex items-start gap-3">
+          <Shield size={20} className="text-teal-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-teal-800">Your identity is protected</p>
+            <p className="text-xs text-teal-600 mt-0.5">Suggestions are completely anonymous — your name, email, and department are never stored or visible to anyone, including admins.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Suggestion List */}
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <EmptyState
+            icon={MessageCircle}
+            title={suggestions.length === 0 ? "No suggestions yet" : "No matching suggestions"}
+            description={isAdmin
+              ? "Suggestions from your team will appear here anonymously."
+              : "Be the first to share a suggestion, idea, or piece of feedback!"}
+            action={!isAdmin && suggestions.length === 0 && (
+              <button
+                onClick={onCreateSuggestion}
+                className="px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors"
+              >
+                Share a Suggestion
+              </button>
+            )}
+          />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filtered.map(suggestion => (
+            <div key={suggestion.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                      <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full border ${SUGGESTION_STATUS_STYLES[suggestion.status]}`}>
+                        {suggestion.status}
+                      </span>
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">{suggestion.category}</span>
+                      <span className="text-xs text-slate-400">{formatDateTime(suggestion.createdAt)}</span>
+                    </div>
+                    <h4 className="text-base font-bold text-slate-900">{suggestion.title}</h4>
+                    <p className="text-sm text-slate-600 mt-2 whitespace-pre-wrap">{suggestion.body}</p>
+
+                    {/* Anonymous Label */}
+                    <div className="flex items-center gap-2 mt-3">
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
+                        <User size={14} className="text-slate-400" />
+                      </div>
+                      <span className="text-sm text-slate-400 italic">Anonymous</span>
+                    </div>
+                  </div>
+
+                  {/* Admin actions */}
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          setRespondingTo(respondingTo === suggestion.id ? null : suggestion.id);
+                          setResponseText(suggestion.adminResponse || '');
+                          setSelectedStatus(suggestion.status);
+                        }}
+                        className={`p-2 rounded-xl transition-colors ${respondingTo === suggestion.id ? 'bg-teal-100 text-teal-700' : 'hover:bg-slate-100 text-slate-400'}`}
+                        title="Respond"
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                      <button
+                        onClick={() => onDeleteSuggestion(suggestion.id)}
+                        className="p-2 hover:bg-red-50 rounded-xl text-slate-400 hover:text-red-500 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Admin Response (if exists) */}
+                {suggestion.adminResponse && respondingTo !== suggestion.id && (
+                  <div className="mt-4 p-4 bg-violet-50 border border-violet-100 rounded-xl">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Shield size={14} className="text-violet-600" />
+                      <span className="text-xs font-semibold text-violet-700">Admin Response</span>
+                      {suggestion.respondedAt && (
+                        <span className="text-xs text-violet-400">· {formatDateTime(suggestion.respondedAt)}</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-violet-800 whitespace-pre-wrap">{suggestion.adminResponse}</p>
+                  </div>
+                )}
+
+                {/* Admin Respond Form (inline) */}
+                {isAdmin && respondingTo === suggestion.id && (
+                  <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Update Status</label>
+                      <select
+                        value={selectedStatus}
+                        onChange={(e) => setSelectedStatus(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                      >
+                        {SUGGESTION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Response (visible to everyone)</label>
+                      <textarea
+                        value={responseText}
+                        onChange={(e) => setResponseText(e.target.value)}
+                        placeholder="Share your response or update..."
+                        rows={3}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { setRespondingTo(null); setResponseText(''); setSelectedStatus(''); }}
+                        className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleRespond(suggestion.id)}
+                        className="px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center gap-1.5"
+                      >
+                        <Check size={15} />
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ AI LEAVE Q&A BOT ============
+function LeaveQABot({ onClose }) {
+  const [messages, setMessages] = useState([
+    { role: 'assistant', text: "Hi! I'm Pocket Fund's leave policy assistant. Ask me anything about leaves, working hours, or time-off policies." },
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const userMsg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setLoading(true);
+
+    const systemPrompt = `You are a helpful HR assistant for Pocket Fund. Answer questions about leave policy based on this information:\n${POCKET_FUND_LEAVE_POLICY}\nBe concise (2-4 sentences max). If you don't know something, say so honestly. Be friendly and professional. Do not use markdown formatting.`;
+
+    const history = messages.slice(-6).map(m => `${m.role}: ${m.text}`).join('\n');
+    const result = await callClaude(systemPrompt, `${history}\nuser: ${userMsg}`);
+
+    setMessages(prev => [...prev, { role: 'assistant', text: result }]);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed bottom-5 right-5 w-96 h-[480px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden z-[60]" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-purple-50">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+            <Bot size={16} className="text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Leave Policy Assistant</p>
+            <p className="text-xs text-emerald-600 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+              Online
+            </p>
+          </div>
+        </div>
+        <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+          <X size={16} className="text-slate-500" />
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[82%] px-3.5 py-2.5 text-sm leading-relaxed ${
+              m.role === 'user'
+                ? 'bg-violet-600 text-white rounded-2xl rounded-br-md'
+                : 'bg-slate-100 text-slate-800 rounded-2xl rounded-bl-md'
+            }`}>
+              {m.text}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-slate-100 text-slate-500 rounded-2xl rounded-bl-md px-3.5 py-2.5 text-sm">
+              <span className="animate-pulse">Thinking...</span>
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div className="p-3 border-t border-slate-100 flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+          placeholder="Ask about leave policy..."
+          className="flex-1 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+        />
+        <button
+          onClick={sendMessage}
+          disabled={!input.trim() || loading}
+          className="px-3 py-2.5 bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-colors disabled:opacity-50"
+        >
+          <Send size={16} />
+        </button>
       </div>
     </div>
   );
