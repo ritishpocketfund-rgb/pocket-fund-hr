@@ -39,7 +39,10 @@ const LEAVE_TYPES = ['Personal Leave', 'Sick Leave', 'Exam Leave', 'Unpaid Leave
 const LEAVE_STATUSES = ['Pending', 'Approved', 'Rejected'];
 const ANNOUNCEMENT_PRIORITIES = ['Normal', 'Important', 'Urgent'];
 const ANNOUNCEMENT_CATEGORIES = ['General', 'Policy Update', 'Event', 'Maintenance', 'Achievement', 'Reminder'];
-const NOTIFICATION_TYPES = ['ticket_update', 'leave_update', 'announcement', 'comment', 'assignment', 'system', 'salary_update'];
+const NOTIFICATION_TYPES = ['ticket_update', 'leave_update', 'announcement', 'comment', 'assignment', 'system', 'salary_update', 'referral_update'];
+const REFERRAL_STATUSES = ['Submitted', 'Under Review', 'Interview', 'Selected', 'Joined', 'Completed 6 Months', 'Bonus Paid', 'Rejected'];
+const REFERRAL_RELATIONS = ['Friend', 'Ex-Colleague', 'College Mate', 'Family', 'Professional Network', 'Other'];
+const NOTICE_PERIODS = ['Immediate', '15 Days', '1 Month', '2 Months', '3 Months', 'Currently Serving'];
 
 const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'];
 const INDIAN_STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Chandigarh','Puducherry','Jammu & Kashmir','Ladakh'];
@@ -457,6 +460,7 @@ export default function PocketFundDashboard() {
   const [notifications, setNotifications] = useState([]);
   const [salaryRecords, setSalaryRecords] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  const [referrals, setReferrals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
@@ -477,6 +481,7 @@ export default function PocketFundDashboard() {
   const [showAIChat, setShowAIChat] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showNewSuggestionModal, setShowNewSuggestionModal] = useState(false);
+  const [showNewReferralModal, setShowNewReferralModal] = useState(false);
   const [viewingEmployee, setViewingEmployee] = useState(null);
 
   // Load data from storage
@@ -640,6 +645,20 @@ export default function PocketFundDashboard() {
           await storage.set('pocketfund-suggestions', JSON.stringify([]));
         }
 
+        // Load referrals
+        let referralsResult;
+        try {
+          referralsResult = await storage.get('pocketfund-referrals');
+        } catch (e) {
+          referralsResult = null;
+        }
+        if (referralsResult?.value) {
+          setReferrals(JSON.parse(referralsResult.value));
+        } else {
+          setReferrals([]);
+          await storage.set('pocketfund-referrals', JSON.stringify([]));
+        }
+
         // Load current user preference
         let userResult;
         try {
@@ -663,7 +682,7 @@ export default function PocketFundDashboard() {
   const refreshData = useCallback(async (silent = true) => {
     if (!silent) setIsSyncing(true);
     try {
-      const [empR, tktR, lvR, actR, annR, ntfR, salR, sugR] = await Promise.all([
+      const [empR, tktR, lvR, actR, annR, ntfR, salR, sugR, refR] = await Promise.all([
         storage.get('pocketfund-employees'),
         storage.get('pocketfund-tickets'),
         storage.get('pocketfund-leaves'),
@@ -672,6 +691,7 @@ export default function PocketFundDashboard() {
         storage.get('pocketfund-notifications'),
         storage.get('pocketfund-salary'),
         storage.get('pocketfund-suggestions'),
+        storage.get('pocketfund-referrals').catch(() => null),
       ]);
       if (empR?.value) setEmployees(JSON.parse(empR.value));
       if (tktR?.value) setTickets(JSON.parse(tktR.value));
@@ -681,6 +701,7 @@ export default function PocketFundDashboard() {
       if (ntfR?.value) setNotifications(JSON.parse(ntfR.value));
       if (salR?.value) setSalaryRecords(JSON.parse(salR.value));
       if (sugR?.value) setSuggestions(JSON.parse(sugR.value));
+      if (refR?.value) setReferrals(JSON.parse(refR.value));
       setLastSynced(new Date());
     } catch (e) {
       console.error('Sync failed:', e);
@@ -746,6 +767,12 @@ export default function PocketFundDashboard() {
     await storage.set('pocketfund-suggestions', JSON.stringify(newSuggestions));
   };
 
+  // Save referrals
+  const saveReferrals = async (newReferrals) => {
+    setReferrals(newReferrals);
+    await storage.set('pocketfund-referrals', JSON.stringify(newReferrals));
+  };
+
   // Add notification helper
   const addNotification = async (notif) => {
     const newNotif = { id: generateId('NTF'), ...notif, read: false, at: Date.now() };
@@ -772,7 +799,7 @@ export default function PocketFundDashboard() {
 
   // Unread notification count
   const unreadNotifCount = useMemo(() => {
-    return notifications.filter(n => !n.read && (!n.forUser || n.forUser === currentUser?.id || n.forUser === 'all')).length;
+    return notifications.filter(n => !n.read && (!n.forUser || n.forUser === currentUser?.id || n.forUser === 'all' || (n.forUsers && n.forUsers.includes(currentUser?.id)))).length;
   }, [notifications, currentUser]);
 
   // Show toast
@@ -902,7 +929,9 @@ export default function PocketFundDashboard() {
     const newLeaves = [newLeave, ...leaves];
     await saveLeaves(newLeaves);
     await addActivity({ type: 'leave_requested', leaveId: newLeave.id, by: currentUser.id });
-    await addNotification({ type: 'leave_update', title: 'New Leave Request', message: `${currentUser.name} requested ${leaveData.type}`, forUser: 'all', relatedId: newLeave.id });
+    // Notify only admins and the requesting employee (not all employees)
+    const adminIds = employees.filter(e => e.role === 'admin').map(e => e.id);
+    await addNotification({ type: 'leave_update', title: 'New Leave Request', message: `${currentUser.name} requested ${leaveData.type}`, forUsers: [currentUser.id, ...adminIds], relatedId: newLeave.id });
     setShowNewLeaveModal(false);
     showToast('Leave request submitted!');
   };
@@ -1009,7 +1038,9 @@ export default function PocketFundDashboard() {
     const newEmployees = [...employees, newEmployee];
     await saveEmployees(newEmployees);
     await addActivity({ type: 'member_added', by: currentUser.id, memberId: newId });
-    await addNotification({ type: 'system', title: 'New Team Member', message: `${memberData.name} has been added to the team`, forUser: 'all' });
+    // Only notify admins about new team members
+    const adminIdsForNotif = employees.filter(e => e.role === 'admin').map(e => e.id);
+    await addNotification({ type: 'system', title: 'New Team Member', message: `${memberData.name} has been added to the team`, forUsers: adminIdsForNotif });
     setShowAddMemberModal(false);
     showToast(`${memberData.name} added successfully!`);
   };
@@ -1091,7 +1122,9 @@ export default function PocketFundDashboard() {
     const newSuggestions = [newSuggestion, ...suggestions];
     await saveSuggestions(newSuggestions);
     await addActivity({ type: 'suggestion_created', by: 'anonymous' });
-    await addNotification({ type: 'system', title: 'New Anonymous Suggestion', message: `Someone submitted a suggestion: "${suggestionData.title}"`, forUser: 'all' });
+    // Only notify admins about new suggestions
+    const adminIdsForSuggestion = employees.filter(e => e.role === 'admin').map(e => e.id);
+    await addNotification({ type: 'system', title: 'New Anonymous Suggestion', message: `Someone submitted a suggestion: "${suggestionData.title}"`, forUsers: adminIdsForSuggestion });
     setShowNewSuggestionModal(false);
     showToast('Suggestion submitted anonymously!');
   };
@@ -1116,6 +1149,53 @@ export default function PocketFundDashboard() {
     showToast('Suggestion deleted');
   };
 
+  // ============ REFERRAL HANDLERS ============
+  const handleCreateReferral = async (referralData) => {
+    const newReferral = {
+      id: generateId('REF'),
+      submittedBy: currentUser.id,
+      ...referralData,
+      status: 'Submitted',
+      createdAt: Date.now(),
+      updatedAt: null,
+      adminNotes: '',
+      joinDate: null,
+      sixMonthDate: null,
+    };
+    const newReferrals = [newReferral, ...referrals];
+    await saveReferrals(newReferrals);
+    await addActivity({ type: 'referral_submitted', by: currentUser.id });
+    // Notify admins only
+    const adminIdsForRef = employees.filter(e => e.role === 'admin').map(e => e.id);
+    await addNotification({ type: 'referral_update', title: 'New Referral', message: `${currentUser.name} referred ${referralData.candidateName}`, forUsers: [...adminIdsForRef, currentUser.id] });
+    setShowNewReferralModal(false);
+    showToast('Referral submitted successfully!');
+  };
+
+  const handleUpdateReferral = async (referralId, updates) => {
+    const referral = referrals.find(r => r.id === referralId);
+    const newReferrals = referrals.map(r => {
+      if (r.id === referralId) {
+        return { ...r, ...updates, updatedAt: Date.now() };
+      }
+      return r;
+    });
+    await saveReferrals(newReferrals);
+    // Notify the employee who submitted the referral
+    if (referral) {
+      const statusMsg = updates.status ? `Status updated to: ${updates.status}` : 'Referral updated';
+      await addNotification({ type: 'referral_update', title: 'Referral Update', message: `Your referral for ${referral.candidateName} — ${statusMsg}`, forUser: referral.submittedBy, relatedId: referralId });
+    }
+    showToast('Referral updated!');
+  };
+
+  const handleDeleteReferral = async (referralId) => {
+    if (!confirm('Delete this referral permanently?')) return;
+    const newReferrals = referrals.filter(r => r.id !== referralId);
+    await saveReferrals(newReferrals);
+    showToast('Referral deleted');
+  };
+
   // Reset all data
   const handleResetData = async () => {
     if (confirm('Are you sure you want to reset all data? This cannot be undone.')) {
@@ -1130,6 +1210,7 @@ export default function PocketFundDashboard() {
       await saveNotifications([]);
       await saveSalaryRecords([]);
       await saveSuggestions([]);
+      await saveReferrals([]);
       // Log out since employee records are reset
       setCurrentUser(null);
       try { await storage.delete('pocketfund-currentuser'); } catch(e) {}
@@ -1300,6 +1381,7 @@ export default function PocketFundDashboard() {
               { id: 'attendance', name: 'Attendance', icon: Clock },
               { id: 'announcements', name: 'Announcements', icon: Megaphone },
               { id: 'suggestions', name: 'Suggestions', icon: MessageCircle },
+              { id: 'referrals', name: 'Referrals', icon: UserCheck },
               ...(isAdmin ? [
                 { id: 'team', name: 'Team Members', icon: Users },
                 { id: 'analytics', name: 'Analytics', icon: BarChart3 }
@@ -1330,6 +1412,9 @@ export default function PocketFundDashboard() {
                 )}
                 {item.id === 'suggestions' && isAdmin && suggestions.filter(s => s.status === 'New').length > 0 && (
                   <span className="ml-auto bg-teal-500 text-white text-xs px-2 py-0.5 rounded-full">{suggestions.filter(s => s.status === 'New').length}</span>
+                )}
+                {item.id === 'referrals' && isAdmin && referrals.filter(r => r.status === 'Submitted').length > 0 && (
+                  <span className="ml-auto bg-indigo-500 text-white text-xs px-2 py-0.5 rounded-full">{referrals.filter(r => r.status === 'Submitted').length}</span>
                 )}
               </button>
             ))}
@@ -2549,6 +2634,19 @@ export default function PocketFundDashboard() {
             />
           )}
 
+          {/* Referrals Tab */}
+          {activeTab === 'referrals' && (
+            <ReferralsPage
+              referrals={referrals}
+              currentUser={currentUser}
+              isAdmin={isAdmin}
+              getEmployee={getEmployee}
+              onCreateReferral={() => setShowNewReferralModal(true)}
+              onUpdateReferral={handleUpdateReferral}
+              onDeleteReferral={handleDeleteReferral}
+            />
+          )}
+
           {/* Settings Tab */}
           {activeTab === 'settings' && (
             <SettingsPage
@@ -2640,6 +2738,16 @@ export default function PocketFundDashboard() {
         <NewSuggestionForm onSubmit={handleCreateSuggestion} onCancel={() => setShowNewSuggestionModal(false)} />
       </Modal>
 
+      {/* New Referral Modal */}
+      <Modal
+        isOpen={showNewReferralModal}
+        onClose={() => setShowNewReferralModal(false)}
+        title="Submit a Referral"
+        size="lg"
+      >
+        <NewReferralForm onSubmit={handleCreateReferral} onCancel={() => setShowNewReferralModal(false)} />
+      </Modal>
+
       {/* Notification Panel */}
       <SlidePanel
         isOpen={showNotificationPanel}
@@ -2647,7 +2755,7 @@ export default function PocketFundDashboard() {
         title="Notifications"
       >
         <NotificationPanel
-          notifications={notifications.filter(n => !n.forUser || n.forUser === currentUser?.id || n.forUser === 'all')}
+          notifications={notifications.filter(n => !n.forUser || n.forUser === currentUser?.id || n.forUser === 'all' || (n.forUsers && n.forUsers.includes(currentUser?.id)))}
           onMarkRead={markNotificationRead}
           onMarkAllRead={markAllNotificationsRead}
           onClearAll={clearAllNotifications}
@@ -4158,6 +4266,7 @@ function NotificationPanel({ notifications, onMarkRead, onMarkAllRead, onClearAl
       case 'announcement': return <Megaphone size={16} className="text-violet-500" />;
       case 'comment': return <Send size={16} className="text-amber-500" />;
       case 'assignment': return <UserCheck size={16} className="text-purple-500" />;
+      case 'referral_update': return <UserCheck size={16} className="text-indigo-500" />;
       default: return <Bell size={16} className="text-slate-400" />;
     }
   };
@@ -5647,6 +5756,304 @@ function SuggestionsPage({ suggestions, currentUser, isAdmin, onCreateSuggestion
                     </div>
                   )}
                 </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ REFERRAL FORM ============
+function NewReferralForm({ onSubmit, onCancel }) {
+  const [form, setForm] = useState({
+    candidateName: '', candidateEmail: '', candidatePhone: '', linkedinUrl: '',
+    resume: null, noticePeriod: '', relation: '', roleAppliedFor: '', notes: '',
+  });
+  const [error, setError] = useState('');
+
+  const handleResumeUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setError('Resume must be under 5MB'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setForm(f => ({ ...f, resume: { name: file.name, size: file.size, type: file.type, data: reader.result } }));
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = () => {
+    setError('');
+    if (!form.candidateName.trim()) { setError('Candidate name is required'); return; }
+    if (!form.candidatePhone.trim() && !form.candidateEmail.trim()) { setError('Provide at least email or phone'); return; }
+    if (!form.relation) { setError('Select your relation with the candidate'); return; }
+    onSubmit(form);
+  };
+
+  return (
+    <div className="space-y-4">
+      {error && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Candidate Name *</label>
+          <input value={form.candidateName} onChange={e => setForm(f => ({ ...f, candidateName: e.target.value }))} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300" placeholder="Full name" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+          <input type="email" value={form.candidateEmail} onChange={e => setForm(f => ({ ...f, candidateEmail: e.target.value }))} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300" placeholder="candidate@email.com" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Phone *</label>
+          <input value={form.candidatePhone} onChange={e => setForm(f => ({ ...f, candidatePhone: e.target.value }))} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300" placeholder="+91 XXXXX XXXXX" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">LinkedIn URL</label>
+          <input value={form.linkedinUrl} onChange={e => setForm(f => ({ ...f, linkedinUrl: e.target.value }))} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300" placeholder="https://linkedin.com/in/..." />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Relation with Candidate *</label>
+          <select value={form.relation} onChange={e => setForm(f => ({ ...f, relation: e.target.value }))} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300">
+            <option value="">Select relation</option>
+            {REFERRAL_RELATIONS.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Notice Period</label>
+          <select value={form.noticePeriod} onChange={e => setForm(f => ({ ...f, noticePeriod: e.target.value }))} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300">
+            <option value="">Select notice period</option>
+            {NOTICE_PERIODS.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Role Applied For</label>
+        <input value={form.roleAppliedFor} onChange={e => setForm(f => ({ ...f, roleAppliedFor: e.target.value }))} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300" placeholder="e.g. Business Analyst, Marketing Intern" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Resume / CV</label>
+        <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-violet-300 transition-colors cursor-pointer" onClick={() => document.getElementById('resumeUpload').click()}>
+          <input id="resumeUpload" type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleResumeUpload} />
+          {form.resume ? (
+            <div className="flex items-center justify-center gap-2 text-sm text-violet-600">
+              <FileText size={18} /> <span className="font-medium">{form.resume.name}</span>
+              <button onClick={(e) => { e.stopPropagation(); setForm(f => ({ ...f, resume: null })); }} className="text-slate-400 hover:text-red-500"><X size={14} /></button>
+            </div>
+          ) : (
+            <div><Upload size={20} className="mx-auto text-slate-400 mb-1" /><p className="text-sm text-slate-500">Click to upload PDF, DOC, or DOCX (max 5MB)</p></div>
+          )}
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Additional Notes</label>
+        <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3} className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-300 resize-none" placeholder="Why do you think this person would be a good fit?" />
+      </div>
+      <div className="flex justify-end gap-3 pt-2">
+        <button onClick={onCancel} className="px-5 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50">Cancel</button>
+        <button onClick={handleSubmit} className="px-5 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-bold hover:bg-violet-700">Submit Referral</button>
+      </div>
+    </div>
+  );
+}
+
+// ============ REFERRALS PAGE ============
+const REFERRAL_STATUS_CONFIG = {
+  'Submitted': { color: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
+  'Under Review': { color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  'Interview': { color: 'bg-purple-50 text-purple-700 border-purple-200', dot: 'bg-purple-500' },
+  'Selected': { color: 'bg-teal-50 text-teal-700 border-teal-200', dot: 'bg-teal-500' },
+  'Joined': { color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  'Completed 6 Months': { color: 'bg-green-50 text-green-700 border-green-200', dot: 'bg-green-600' },
+  'Bonus Paid': { color: 'bg-indigo-50 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' },
+  'Rejected': { color: 'bg-red-50 text-red-600 border-red-200', dot: 'bg-red-500' },
+};
+
+function ReferralsPage({ referrals, currentUser, isAdmin, getEmployee, onCreateReferral, onUpdateReferral, onDeleteReferral }) {
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [expandedId, setExpandedId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editStatus, setEditStatus] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editJoinDate, setEditJoinDate] = useState('');
+
+  const myReferrals = isAdmin ? referrals : referrals.filter(r => r.submittedBy === currentUser?.id);
+
+  const filtered = useMemo(() => {
+    let result = [...myReferrals];
+    if (filterStatus !== 'all') result = result.filter(r => r.status === filterStatus);
+    return result.sort((a, b) => b.createdAt - a.createdAt);
+  }, [myReferrals, filterStatus]);
+
+  const successfulReferrals = referrals.filter(r => ['Completed 6 Months', 'Bonus Paid'].includes(r.status)).length;
+  const activeReferrals = referrals.filter(r => !['Rejected', 'Bonus Paid'].includes(r.status)).length;
+
+  const startEdit = (referral) => {
+    setEditingId(referral.id);
+    setEditStatus(referral.status);
+    setEditNotes(referral.adminNotes || '');
+    setEditJoinDate(referral.joinDate || '');
+  };
+
+  const handleSaveEdit = async (referralId) => {
+    const updates = { status: editStatus, adminNotes: editNotes };
+    if (editJoinDate) updates.joinDate = editJoinDate;
+    if (editStatus === 'Joined' && editJoinDate) {
+      const jd = new Date(editJoinDate);
+      jd.setMonth(jd.getMonth() + 6);
+      updates.sixMonthDate = jd.toISOString().split('T')[0];
+    }
+    await onUpdateReferral(referralId, updates);
+    setEditingId(null);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-6 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
+                <UserCheck size={22} className="text-white" />
+              </div>
+              <h3 className="text-xl font-bold">Referrals</h3>
+            </div>
+            <p className="text-sm text-indigo-100 ml-[52px]">
+              {isAdmin
+                ? `${referrals.length} total referral${referrals.length !== 1 ? 's' : ''} · ${successfulReferrals} successful · ${activeReferrals} active`
+                : `Refer great talent and earn up to ₹25,000 bonus!`}
+            </p>
+          </div>
+          {!isAdmin && (
+            <button onClick={onCreateReferral} className="flex items-center gap-2 px-5 py-2.5 bg-white text-indigo-700 rounded-xl text-sm font-bold hover:bg-indigo-50 transition-colors shadow-sm">
+              <Plus size={18} /> Refer Someone
+            </button>
+          )}
+        </div>
+
+        {/* Stats */}
+        {referrals.length > 0 && (
+          <div className="flex flex-wrap gap-3 mt-5 ml-[52px]">
+            {REFERRAL_STATUSES.map(s => {
+              const count = myReferrals.filter(r => r.status === s).length;
+              if (count === 0) return null;
+              return (
+                <button key={s} onClick={() => setFilterStatus(filterStatus === s ? 'all' : s)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterStatus === s ? 'bg-white text-indigo-700 shadow-sm' : 'bg-white/15 text-white hover:bg-white/25'}`}>
+                  {s}: {count}
+                </button>
+              );
+            })}
+            {filterStatus !== 'all' && (
+              <button onClick={() => setFilterStatus('all')} className="px-3 py-1.5 text-xs text-indigo-200 hover:text-white font-medium">✕ Clear</button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Policy reminder */}
+      {!isAdmin && (
+        <div className="p-4 bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+            <IndianRupee size={18} className="text-indigo-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-indigo-800">Referral Bonus up to ₹25,000</p>
+            <p className="text-xs text-indigo-600 mt-0.5">If your referral joins, performs well, and completes 6 months — you're eligible for a bonus based on the role and performance.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Referral Cards */}
+      {filtered.length === 0 ? (
+        <EmptyState icon={UserCheck} title="No referrals yet" description={isAdmin ? 'No referrals have been submitted.' : "Know someone great? Submit a referral and earn up to ₹25,000!"} action={!isAdmin && <button onClick={onCreateReferral} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700"><Plus size={16} className="inline mr-1" />Refer Someone</button>} />
+      ) : (
+        <div className="space-y-4">
+          {filtered.map(referral => {
+            const isExpanded = expandedId === referral.id;
+            const isEditing = editingId === referral.id;
+            const submitter = getEmployee(referral.submittedBy);
+            const statusConfig = REFERRAL_STATUS_CONFIG[referral.status] || REFERRAL_STATUS_CONFIG['Submitted'];
+
+            return (
+              <div key={referral.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-all">
+                {/* Card Header */}
+                <div className="p-5 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : referral.id)}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4">
+                      <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center font-bold text-indigo-700 text-lg">
+                        {referral.candidateName?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-slate-900">{referral.candidateName}</h4>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                          {referral.roleAppliedFor && <span className="flex items-center gap-1"><Briefcase size={12} />{referral.roleAppliedFor}</span>}
+                          {isAdmin && submitter && <span className="flex items-center gap-1"><User size={12} />by {submitter.name}</span>}
+                          <span>{formatDateTime(referral.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${statusConfig.color}`}>{referral.status}</span>
+                      <ChevronDown size={16} className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div className="px-5 pb-5 border-t border-slate-100 pt-4 space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {referral.candidateEmail && <div><p className="text-xs text-slate-400 mb-0.5">Email</p><p className="text-sm text-slate-700 font-medium">{referral.candidateEmail}</p></div>}
+                      {referral.candidatePhone && <div><p className="text-xs text-slate-400 mb-0.5">Phone</p><p className="text-sm text-slate-700 font-medium">{referral.candidatePhone}</p></div>}
+                      {referral.linkedinUrl && <div><p className="text-xs text-slate-400 mb-0.5">LinkedIn</p><a href={referral.linkedinUrl} target="_blank" rel="noreferrer" className="text-sm text-violet-600 font-medium hover:underline">View Profile</a></div>}
+                      {referral.relation && <div><p className="text-xs text-slate-400 mb-0.5">Relation</p><p className="text-sm text-slate-700 font-medium">{referral.relation}</p></div>}
+                      {referral.noticePeriod && <div><p className="text-xs text-slate-400 mb-0.5">Notice Period</p><p className="text-sm text-slate-700 font-medium">{referral.noticePeriod}</p></div>}
+                      {referral.resume && <div><p className="text-xs text-slate-400 mb-0.5">Resume</p><a href={referral.resume.data} download={referral.resume.name} className="text-sm text-violet-600 font-medium hover:underline flex items-center gap-1"><FileText size={14} />{referral.resume.name}</a></div>}
+                      {referral.joinDate && <div><p className="text-xs text-slate-400 mb-0.5">Join Date</p><p className="text-sm text-slate-700 font-medium">{formatDate(referral.joinDate)}</p></div>}
+                      {referral.sixMonthDate && <div><p className="text-xs text-slate-400 mb-0.5">6 Month Mark</p><p className="text-sm text-slate-700 font-medium">{formatDate(referral.sixMonthDate)}</p></div>}
+                    </div>
+                    {referral.notes && <div><p className="text-xs text-slate-400 mb-0.5">Notes from Referrer</p><p className="text-sm text-slate-600">{referral.notes}</p></div>}
+                    {referral.adminNotes && <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl"><p className="text-xs text-amber-500 font-medium mb-0.5">Admin Notes</p><p className="text-sm text-amber-800">{referral.adminNotes}</p></div>}
+
+                    {/* Admin Actions */}
+                    {isAdmin && !isEditing && (
+                      <div className="flex gap-2 pt-2">
+                        <button onClick={(e) => { e.stopPropagation(); startEdit(referral); }} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 flex items-center gap-1.5"><Edit3 size={14} />Update Status</button>
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteReferral(referral.id); }} className="px-4 py-2 border border-red-200 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50 flex items-center gap-1.5"><Trash2 size={14} />Delete</button>
+                      </div>
+                    )}
+
+                    {/* Admin Edit Form */}
+                    {isAdmin && isEditing && (
+                      <div className="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-200">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
+                            <select value={editStatus} onChange={e => setEditStatus(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                              {REFERRAL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Join Date</label>
+                            <input type="date" value={editJoinDate} onChange={e => setEditJoinDate(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Admin Notes</label>
+                          <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none" placeholder="Internal notes..." />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => handleSaveEdit(referral.id)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">Save</button>
+                          <button onClick={() => setEditingId(null)} className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-white">Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
