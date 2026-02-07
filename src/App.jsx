@@ -1943,7 +1943,8 @@ export default function PocketFundDashboard() {
           </div>
         </div>
 
-        <nav className="flex-1 px-3 overflow-y-auto">
+        <nav className="flex-1 px-3 overflow-y-auto sidebar-nav" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <style>{`.sidebar-nav::-webkit-scrollbar { display: none; }`}</style>
           <div className="space-y-1 pb-2">
             {[
               { id: 'dashboard', name: 'Dashboard', icon: Home },
