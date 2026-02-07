@@ -941,6 +941,7 @@ export default function PocketFundDashboard() {
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showNewSuggestionModal, setShowNewSuggestionModal] = useState(false);
   const [showNewReferralModal, setShowNewReferralModal] = useState(false);
+  const [showCalendarPopup, setShowCalendarPopup] = useState(false);
   const [viewingEmployee, setViewingEmployee] = useState(null);
 
   // Load data from storage
@@ -1987,6 +1988,36 @@ export default function PocketFundDashboard() {
                   </span>
                 )}
               </button>
+              {/* Calendar Popup Toggle */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowCalendarPopup(prev => !prev)}
+                  className={`p-2.5 rounded-xl transition-colors ${showCalendarPopup ? 'bg-violet-100 text-violet-700' : 'hover:bg-slate-100 text-slate-500'}`}
+                  title="Calendar"
+                >
+                  <Calendar size={20} />
+                </button>
+                {showCalendarPopup && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowCalendarPopup(false)} />
+                    <div className="absolute right-0 top-12 z-50 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-bold text-slate-900">Calendar</h4>
+                        <button onClick={() => { setShowCalendarPopup(false); setActiveTab('holidays'); }} className="text-xs text-violet-600 font-medium hover:text-violet-700">All Holidays →</button>
+                      </div>
+                      <DashboardCalendar holidaySelections={holidaySelections} currentUser={currentUser} />
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* Logout */}
+              <button
+                onClick={handleLogout}
+                className="p-2.5 hover:bg-red-50 rounded-xl transition-colors group"
+                title="Logout"
+              >
+                <LogOut size={20} className="text-slate-400 group-hover:text-red-500 transition-colors" />
+              </button>
               {!isAdmin && (
                 <div className="flex gap-2">
                   <button
@@ -2043,64 +2074,50 @@ export default function PocketFundDashboard() {
                 />
               </div>
 
-              {/* Calendar & Upcoming Holidays */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
-                {/* Mini Calendar */}
-                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-violet-50 rounded-xl">
-                        <Calendar size={18} className="text-violet-600" />
-                      </div>
-                      <h3 className="font-bold text-slate-900">Calendar</h3>
+              {/* Upcoming Holidays Strip */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-8">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-emerald-50 rounded-lg">
+                      <Star size={16} className="text-emerald-600" />
                     </div>
-                    <button onClick={() => setActiveTab('holidays')} className="text-xs text-violet-600 font-medium hover:text-violet-700">
-                      All Holidays →
-                    </button>
+                    <h3 className="font-bold text-slate-900 text-sm">Upcoming Holidays</h3>
                   </div>
-                  <DashboardCalendar
-                    holidaySelections={holidaySelections}
-                    currentUser={currentUser}
-                  />
+                  <button onClick={() => setActiveTab('holidays')} className="text-xs text-violet-600 font-medium hover:text-violet-700">
+                    View All →
+                  </button>
                 </div>
-
-                {/* Upcoming Holidays */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                  <div className="p-5 border-b border-slate-100">
-                    <h3 className="font-bold text-slate-900">Upcoming Holidays</h3>
-                  </div>
-                  <div className="p-4 space-y-3 max-h-80 overflow-y-auto">
-                    {(() => {
-                      const today = new Date().toISOString().split('T')[0];
-                      const myOptionals = holidaySelections.filter(s => s.employeeId === currentUser?.id).map(s => s.holidayId);
-                      const upcoming = ALL_HOLIDAYS_2026.filter(h => {
-                        if (h.date < today) return false;
-                        if (h.type === 'fixed') return true;
-                        if (h.type === 'optional' && myOptionals.includes(h.id)) return true;
-                        if (h.type === 'custom') return true;
-                        return false;
-                      }).slice(0, 6);
-                      if (upcoming.length === 0) return (
-                        <p className="text-sm text-slate-400 text-center py-4">No upcoming holidays</p>
-                      );
-                      return upcoming.map(h => (
-                        <div key={h.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
-                          <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center text-white ${
-                            h.type === 'fixed' ? 'bg-gradient-to-br from-emerald-500 to-green-600' :
-                            h.type === 'optional' ? 'bg-gradient-to-br from-amber-500 to-orange-500' :
-                            'bg-gradient-to-br from-violet-500 to-purple-600'
-                          }`}>
-                            <span className="text-xs font-bold leading-none">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric' })}</span>
-                            <span className="text-[10px] leading-none mt-0.5">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-900 truncate">{h.name}</p>
-                            <p className="text-xs text-slate-400">{h.day} · {h.type === 'fixed' ? 'Fixed' : h.type === 'optional' ? 'Your Pick' : 'Custom'}</p>
-                          </div>
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {(() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    const myOptionals = holidaySelections.filter(s => s.employeeId === currentUser?.id).map(s => s.holidayId);
+                    const upcoming = ALL_HOLIDAYS_2026.filter(h => {
+                      if (h.date < today) return false;
+                      if (h.type === 'fixed') return true;
+                      if (h.type === 'optional' && myOptionals.includes(h.id)) return true;
+                      if (h.type === 'custom') return true;
+                      return false;
+                    }).slice(0, 5);
+                    if (upcoming.length === 0) return (
+                      <p className="text-sm text-slate-400 py-2">No upcoming holidays</p>
+                    );
+                    return upcoming.map(h => (
+                      <div key={h.id} className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border flex-shrink-0 ${
+                        h.type === 'fixed' ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
+                      }`}>
+                        <div className={`w-9 h-9 rounded-lg flex flex-col items-center justify-center text-white ${
+                          h.type === 'fixed' ? 'bg-gradient-to-br from-emerald-500 to-green-600' : 'bg-gradient-to-br from-amber-500 to-orange-500'
+                        }`}>
+                          <span className="text-xs font-bold leading-none">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric' })}</span>
+                          <span className="text-[9px] leading-none mt-0.5">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}</span>
                         </div>
-                      ));
-                    })()}
-                  </div>
+                        <div>
+                          <p className="text-xs font-semibold text-slate-900">{h.name}</p>
+                          <p className="text-[10px] text-slate-500">{h.day}</p>
+                        </div>
+                      </div>
+                    ));
+                  })()}
                 </div>
               </div>
 
