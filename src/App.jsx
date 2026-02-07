@@ -3696,7 +3696,7 @@ function ProfileSetupScreen({ currentUser, onComplete, onLogout, toast, setToast
           ))}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-100">
           <div className="p-6">
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 flex items-start gap-2">
