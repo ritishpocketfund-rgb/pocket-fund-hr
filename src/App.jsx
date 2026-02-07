@@ -2074,49 +2074,128 @@ export default function PocketFundDashboard() {
                 />
               </div>
 
-              {/* Upcoming Holidays Strip */}
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-8">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-1.5 bg-emerald-50 rounded-lg">
-                      <Star size={16} className="text-emerald-600" />
-                    </div>
-                    <h3 className="font-bold text-slate-900 text-sm">Upcoming Holidays</h3>
-                  </div>
-                  <button onClick={() => setActiveTab('holidays')} className="text-xs text-violet-600 font-medium hover:text-violet-700">
-                    View All →
-                  </button>
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-1">
-                  {(() => {
-                    const today = new Date().toISOString().split('T')[0];
-                    const myOptionals = holidaySelections.filter(s => s.employeeId === currentUser?.id).map(s => s.holidayId);
-                    const upcoming = ALL_HOLIDAYS_2026.filter(h => {
-                      if (h.date < today) return false;
-                      if (h.type === 'fixed') return true;
-                      if (h.type === 'optional' && myOptionals.includes(h.id)) return true;
-                      if (h.type === 'custom') return true;
-                      return false;
-                    }).slice(0, 5);
-                    if (upcoming.length === 0) return (
-                      <p className="text-sm text-slate-400 py-2">No upcoming holidays</p>
-                    );
-                    return upcoming.map(h => (
-                      <div key={h.id} className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border flex-shrink-0 ${
-                        h.type === 'fixed' ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
-                      }`}>
-                        <div className={`w-9 h-9 rounded-lg flex flex-col items-center justify-center text-white ${
-                          h.type === 'fixed' ? 'bg-gradient-to-br from-emerald-500 to-green-600' : 'bg-gradient-to-br from-amber-500 to-orange-500'
-                        }`}>
-                          <span className="text-xs font-bold leading-none">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric' })}</span>
-                          <span className="text-[9px] leading-none mt-0.5">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}</span>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold text-slate-900">{h.name}</p>
-                          <p className="text-[10px] text-slate-500">{h.day}</p>
-                        </div>
+              {/* Upcoming Holidays + Salary Status Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+                {/* Upcoming Holidays Strip */}
+                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 bg-emerald-50 rounded-lg">
+                        <Star size={16} className="text-emerald-600" />
                       </div>
-                    ));
+                      <h3 className="font-bold text-slate-900 text-sm">Upcoming Holidays</h3>
+                    </div>
+                    <button onClick={() => setActiveTab('holidays')} className="text-xs text-violet-600 font-medium hover:text-violet-700">
+                      View All →
+                    </button>
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-1">
+                    {(() => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const myOptionals = holidaySelections.filter(s => s.employeeId === currentUser?.id).map(s => s.holidayId);
+                      const upcoming = ALL_HOLIDAYS_2026.filter(h => {
+                        if (h.date < today) return false;
+                        if (h.type === 'fixed') return true;
+                        if (h.type === 'optional' && myOptionals.includes(h.id)) return true;
+                        if (h.type === 'custom') return true;
+                        return false;
+                      }).slice(0, 4);
+                      if (upcoming.length === 0) return (
+                        <p className="text-sm text-slate-400 py-2">No upcoming holidays</p>
+                      );
+                      return upcoming.map(h => (
+                        <div key={h.id} className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border flex-shrink-0 ${
+                          h.type === 'fixed' ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
+                        }`}>
+                          <div className={`w-9 h-9 rounded-lg flex flex-col items-center justify-center text-white ${
+                            h.type === 'fixed' ? 'bg-gradient-to-br from-emerald-500 to-green-600' : 'bg-gradient-to-br from-amber-500 to-orange-500'
+                          }`}>
+                            <span className="text-xs font-bold leading-none">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric' })}</span>
+                            <span className="text-[9px] leading-none mt-0.5">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}</span>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-slate-900">{h.name}</p>
+                            <p className="text-[10px] text-slate-500">{h.day}</p>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+
+                {/* Salary Status Mini Card */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  {(() => {
+                    const currentMonth = getMonthKey();
+                    const monthLabel = getMonthString();
+                    if (currentUser.role === 'employee') {
+                      const record = getSalaryRecord(currentUser.id, currentMonth);
+                      const cfg = record ? SALARY_STATUS_CONFIG[record.status] : SALARY_STATUS_CONFIG['Not Processed'];
+                      const statusText = record ? record.status : 'Not Processed';
+                      return (
+                        <>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-1.5 bg-violet-50 rounded-lg">
+                                <Wallet size={16} className="text-violet-600" />
+                              </div>
+                              <h3 className="font-bold text-slate-900 text-sm">Salary Status</h3>
+                            </div>
+                            <button onClick={() => setActiveTab('salary')} className="text-xs text-violet-600 font-medium hover:text-violet-700">
+                              Details →
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2.5 mb-2">
+                            <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
+                            <span className={`text-lg font-bold ${
+                              statusText === 'Processed' ? 'text-emerald-700' :
+                              statusText === 'In Progress' ? 'text-blue-700' :
+                              statusText === 'Delayed' ? 'text-amber-700' :
+                              statusText === 'On Hold' ? 'text-orange-600' :
+                              'text-slate-600'
+                            }`}>{statusText}</span>
+                          </div>
+                          <p className="text-xs text-slate-500">{cfg.label}</p>
+                          <p className="text-[10px] text-slate-400 mt-2">{monthLabel}</p>
+                        </>
+                      );
+                    } else {
+                      // Admin: show summary
+                      const allEmps = employees.filter(e => e.role !== 'admin');
+                      const processed = allEmps.filter(e => { const r = getSalaryRecord(e.id, currentMonth); return r && r.status === 'Processed'; }).length;
+                      const inProgress = allEmps.filter(e => { const r = getSalaryRecord(e.id, currentMonth); return r && r.status === 'In Progress'; }).length;
+                      const pending = allEmps.length - processed - inProgress;
+                      return (
+                        <>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-1.5 bg-violet-50 rounded-lg">
+                                <Wallet size={16} className="text-violet-600" />
+                              </div>
+                              <h3 className="font-bold text-slate-900 text-sm">Salary Overview</h3>
+                            </div>
+                            <button onClick={() => setActiveTab('salary')} className="text-xs text-violet-600 font-medium hover:text-violet-700">
+                              Manage →
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-400 mb-3">{monthLabel}</p>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-500 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" />Processed</span>
+                              <span className="text-sm font-bold text-slate-900">{processed}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-500 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500" />In Progress</span>
+                              <span className="text-sm font-bold text-slate-900">{inProgress}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-500 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300" />Not Processed</span>
+                              <span className="text-sm font-bold text-slate-900">{pending}</span>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    }
                   })()}
                 </div>
               </div>
@@ -2164,53 +2243,6 @@ export default function PocketFundDashboard() {
                   ))}
                 </div>
               )}
-
-              {/* Salary Status Card (Employee Dashboard) */}
-              {currentUser.role === 'employee' && (() => {
-                const currentMonth = getMonthKey();
-                const record = getSalaryRecord(currentUser.id, currentMonth);
-                const monthLabel = getMonthString();
-                const cfg = record ? SALARY_STATUS_CONFIG[record.status] : SALARY_STATUS_CONFIG['Not Processed'];
-                const statusText = record ? record.status : 'Not Processed';
-                return (
-                  <div className="mb-8">
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 bg-violet-50 rounded-xl">
-                            <Wallet size={20} className="text-violet-600" />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-slate-900">Salary / Stipend Status</h3>
-                            <p className="text-xs text-slate-400">{monthLabel}</p>
-                          </div>
-                        </div>
-                        <button onClick={() => setActiveTab('salary')} className="text-xs text-violet-600 font-medium hover:text-violet-700">
-                          View Details →
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className={`w-3 h-3 rounded-full ${cfg.dot}`} />
-                        <span className={`text-xl font-bold ${
-                          statusText === 'Processed' ? 'text-emerald-700' :
-                          statusText === 'In Progress' ? 'text-blue-700' :
-                          statusText === 'Delayed' ? 'text-amber-700' :
-                          statusText === 'On Hold' ? 'text-orange-600' :
-                          'text-slate-600'
-                        }`}>{statusText}</span>
-                      </div>
-                      <p className="text-sm text-slate-500 mb-1">{cfg.label}</p>
-                      {record?.note && (
-                        <p className="text-sm text-slate-600 mt-2 p-2.5 bg-slate-50 rounded-xl italic">"{record.note}"</p>
-                      )}
-                      {record?.updatedAt && (
-                        <p className="text-xs text-slate-400 mt-2">Updated {formatDateTime(record.updatedAt)}</p>
-                      )}
-                      <p className="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">Salary amounts are confidential and not shown here.</p>
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* Quick Actions for Employees */}
               {currentUser.role === 'employee' && (
