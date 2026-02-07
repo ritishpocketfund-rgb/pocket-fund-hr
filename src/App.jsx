@@ -1425,8 +1425,9 @@ export default function PocketFundDashboard() {
     const newTickets = [newTicket, ...tickets];
     await saveTickets(newTickets);
     await addActivity({ type: 'ticket_created', ticketId: newTicket.id, by: currentUser.id });
-    // Notify admins
-    await addNotification({ type: 'ticket_update', title: 'New Ticket', message: `${currentUser.name} created ticket: ${ticketData.title}`, forUser: 'all', relatedId: newTicket.id });
+    // Notify only the creator and admins (tickets are confidential)
+    const adminIdsForTicket = employees.filter(e => e.role === 'admin').map(e => e.id);
+    await addNotification({ type: 'ticket_update', title: 'New Ticket', message: `${currentUser.name} created ticket: ${ticketData.title}`, forUsers: [currentUser.id, ...adminIdsForTicket], relatedId: newTicket.id });
     setShowNewTicketModal(false);
     showToast('Ticket created successfully!');
   };
@@ -1833,11 +1834,14 @@ export default function PocketFundDashboard() {
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const twoWeeksAgo = now - 14 * 24 * 60 * 60 * 1000;
 
-    const openTickets = tickets.filter(t => !['Resolved', 'Closed'].includes(t.status)).length;
-    const resolvedThisWeek = tickets.filter(t => t.resolvedAt && t.resolvedAt > weekAgo).length;
-    const resolvedLastWeek = tickets.filter(t => t.resolvedAt && t.resolvedAt > twoWeeksAgo && t.resolvedAt <= weekAgo).length;
+    const userTickets = currentUser?.role === 'employee' 
+      ? tickets.filter(t => t.employeeId === currentUser.id) 
+      : tickets;
+    const openTickets = userTickets.filter(t => !['Resolved', 'Closed'].includes(t.status)).length;
+    const resolvedThisWeek = userTickets.filter(t => t.resolvedAt && t.resolvedAt > weekAgo).length;
+    const resolvedLastWeek = userTickets.filter(t => t.resolvedAt && t.resolvedAt > twoWeeksAgo && t.resolvedAt <= weekAgo).length;
     
-    const resolvedTickets = tickets.filter(t => t.resolvedAt);
+    const resolvedTickets = userTickets.filter(t => t.resolvedAt);
     const avgResolutionTime = resolvedTickets.length > 0
       ? resolvedTickets.reduce((sum, t) => sum + (t.resolvedAt - t.createdAt), 0) / resolvedTickets.length / 3600000
       : 0;
@@ -1886,7 +1890,7 @@ export default function PocketFundDashboard() {
         ? (resolvedTickets.filter(t => t.rating).reduce((sum, t) => sum + t.rating, 0) / resolvedTickets.filter(t => t.rating).length).toFixed(1)
         : 'N/A',
     };
-  }, [tickets, leaves]);
+  }, [tickets, leaves, currentUser]);
 
   // Loading state
   if (isLoading) {
