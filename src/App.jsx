@@ -44,6 +44,35 @@ const REFERRAL_STATUSES = ['Submitted', 'Under Review', 'Interview', 'Selected',
 const REFERRAL_RELATIONS = ['Friend', 'Ex-Colleague', 'College Mate', 'Family', 'Professional Network', 'Other'];
 const NOTICE_PERIODS = ['Immediate', '15 Days', '1 Month', '2 Months', '3 Months', 'Currently Serving'];
 
+// ============ 2026 HOLIDAY CALENDAR ============
+const MAX_OPTIONAL_HOLIDAYS = 5;
+
+const FIXED_HOLIDAYS_2026 = [
+  { id: 'FH-1', name: "New Year's Day", date: '2026-01-01', day: 'Thursday' },
+  { id: 'FH-2', name: 'Republic Day', date: '2026-01-26', day: 'Monday' },
+  { id: 'FH-3', name: 'Holi', date: '2026-03-04', day: 'Wednesday' },
+  { id: 'FH-4', name: 'Maharashtra Day', date: '2026-05-01', day: 'Friday' },
+  { id: 'FH-5', name: 'Independence Day', date: '2026-08-15', day: 'Saturday' },
+];
+
+const OPTIONAL_HOLIDAYS_2026 = [
+  { id: 'OH-1', name: 'Eid al-Fitr', date: '2026-03-20', day: 'Friday', note: 'Date may vary' },
+  { id: 'OH-2', name: 'Gudi Padwa', date: '2026-03-20', day: 'Friday' },
+  { id: 'OH-3', name: 'Raksha Bandhan', date: '2026-08-19', day: 'Wednesday' },
+  { id: 'OH-4', name: 'Janmashtami', date: '2026-08-22', day: 'Saturday' },
+  { id: 'OH-5', name: 'Ganesh Chaturthi', date: '2026-09-15', day: 'Tuesday' },
+  { id: 'OH-6', name: 'Gandhi Jayanti', date: '2026-10-02', day: 'Friday' },
+  { id: 'OH-7', name: 'Vijaya Dashami (Dussehra)', date: '2026-10-21', day: 'Wednesday' },
+  { id: 'OH-8', name: 'Diwali Holiday (Day 1)', date: '2026-11-09', day: 'Monday' },
+  { id: 'OH-9', name: 'Diwali Holiday (Day 2)', date: '2026-11-10', day: 'Tuesday' },
+  { id: 'OH-10', name: 'Christmas Day', date: '2026-12-25', day: 'Friday' },
+];
+
+const ALL_HOLIDAYS_2026 = [
+  ...FIXED_HOLIDAYS_2026.map(h => ({ ...h, type: 'fixed' })),
+  ...OPTIONAL_HOLIDAYS_2026.map(h => ({ ...h, type: 'optional' })),
+].sort((a, b) => new Date(a.date) - new Date(b.date));
+
 const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'];
 const INDIAN_STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Chandigarh','Puducherry','Jammu & Kashmir','Ladakh'];
 
@@ -448,6 +477,435 @@ const EmptyState = ({ icon: Icon, title, description, action }) => (
   </div>
 );
 
+// ============ DASHBOARD CALENDAR ============
+const DashboardCalendar = ({ holidaySelections, currentUser }) => {
+  const [viewDate, setViewDate] = useState(new Date());
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const myOptionals = holidaySelections.filter(s => s.employeeId === currentUser?.id).map(s => s.holidayId);
+
+  const getHolidayForDate = (day) => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const fixed = FIXED_HOLIDAYS_2026.find(h => h.date === dateStr);
+    if (fixed) return { ...fixed, type: 'fixed' };
+    const opt = OPTIONAL_HOLIDAYS_2026.find(h => h.date === dateStr);
+    if (opt && myOptionals.includes(opt.id)) return { ...opt, type: 'optional-selected' };
+    if (opt) return { ...opt, type: 'optional' };
+    const custom = holidaySelections.find(s => s.employeeId === currentUser?.id && s.type === 'custom' && s.date === dateStr);
+    if (custom) return { name: custom.name, date: dateStr, type: 'custom' };
+    return null;
+  };
+
+  const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
+  const goToToday = () => setViewDate(new Date());
+
+  const days = [];
+  for (let i = 0; i < firstDay; i++) days.push(null);
+  for (let d = 1; d <= daysInMonth; d++) days.push(d);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={prevMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+          <ChevronLeft size={16} className="text-slate-500" />
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-slate-900">
+            {viewDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+          </span>
+          {(month !== today.getMonth() || year !== today.getFullYear()) && (
+            <button onClick={goToToday} className="text-xs text-violet-600 font-medium hover:text-violet-700">Today</button>
+          )}
+        </div>
+        <button onClick={nextMonth} className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors">
+          <ChevronRight size={16} className="text-slate-500" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 mb-1">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+          <div key={d} className="text-center text-xs font-semibold text-slate-400 py-1.5">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {days.map((day, i) => {
+          if (!day) return <div key={`empty-${i}`} className="h-10" />;
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const isToday = dateStr === todayStr;
+          const holiday = getHolidayForDate(day);
+          const isSunday = new Date(year, month, day).getDay() === 0;
+
+          return (
+            <div
+              key={day}
+              className={`h-10 flex items-center justify-center rounded-lg text-sm relative group cursor-default transition-colors ${
+                isToday ? 'bg-violet-600 text-white font-bold ring-2 ring-violet-300' :
+                holiday?.type === 'fixed' ? 'bg-emerald-100 text-emerald-800 font-semibold' :
+                holiday?.type === 'optional-selected' ? 'bg-amber-100 text-amber-800 font-semibold' :
+                holiday?.type === 'optional' ? 'bg-amber-50 text-amber-600' :
+                holiday?.type === 'custom' ? 'bg-violet-100 text-violet-800 font-semibold' :
+                isSunday ? 'text-red-400' :
+                'text-slate-700 hover:bg-slate-50'
+              }`}
+              title={holiday ? `${holiday.name}${holiday.type === 'fixed' ? ' (Fixed)' : holiday.type === 'optional-selected' ? ' (Your Pick)' : holiday.type === 'optional' ? ' (Optional)' : ' (Custom)'}` : ''}
+            >
+              {day}
+              {holiday && !isToday && (
+                <span className={`absolute bottom-0.5 w-1.5 h-1.5 rounded-full ${
+                  holiday.type === 'fixed' ? 'bg-emerald-500' :
+                  holiday.type === 'optional-selected' || holiday.type === 'custom' ? 'bg-amber-500' :
+                  'bg-amber-300'
+                }`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+          <span className="text-xs text-slate-500">Fixed</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+          <span className="text-xs text-slate-500">Your Picks</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-300" />
+          <span className="text-xs text-slate-500">Optional</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />
+          <span className="text-xs text-slate-500">Today</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============ HOLIDAYS PAGE ============
+const HolidaysPage = ({ currentUser, isAdmin, holidaySelections, onSaveSelections, employees, getEmployee, showToast }) => {
+  const [customName, setCustomName] = useState('');
+  const [customDate, setCustomDate] = useState('');
+  const [customReason, setCustomReason] = useState('');
+  const [viewMode, setViewMode] = useState('my'); // 'my' or 'team' (admin)
+
+  const mySelections = holidaySelections.filter(s => s.employeeId === currentUser.id && s.type === 'optional');
+  const myCustoms = holidaySelections.filter(s => s.employeeId === currentUser.id && s.type === 'custom');
+  const selectedCount = mySelections.length + myCustoms.length;
+  const remaining = MAX_OPTIONAL_HOLIDAYS - selectedCount;
+
+  const isOptionalSelected = (holidayId) => mySelections.some(s => s.holidayId === holidayId);
+
+  const toggleOptionalHoliday = (holiday) => {
+    if (isOptionalSelected(holiday.id)) {
+      // Remove
+      const updated = holidaySelections.filter(s => !(s.employeeId === currentUser.id && s.holidayId === holiday.id && s.type === 'optional'));
+      onSaveSelections(updated);
+      showToast(`Removed ${holiday.name} from your holidays`, 'info');
+    } else {
+      if (remaining <= 0) {
+        showToast(`You've already selected ${MAX_OPTIONAL_HOLIDAYS} holidays. Remove one to add another.`, 'error');
+        return;
+      }
+      const newSelection = {
+        id: generateId('HOL'),
+        employeeId: currentUser.id,
+        holidayId: holiday.id,
+        name: holiday.name,
+        date: holiday.date,
+        type: 'optional',
+        selectedAt: Date.now(),
+      };
+      onSaveSelections([...holidaySelections, newSelection]);
+      showToast(`Added ${holiday.name} to your holidays`, 'success');
+    }
+  };
+
+  const addCustomHoliday = () => {
+    if (!customName.trim() || !customDate) {
+      showToast('Please enter a festival name and date', 'error');
+      return;
+    }
+    if (remaining <= 0) {
+      showToast(`You've already selected ${MAX_OPTIONAL_HOLIDAYS} holidays. Remove one to add another.`, 'error');
+      return;
+    }
+    const newCustom = {
+      id: generateId('CHOL'),
+      employeeId: currentUser.id,
+      type: 'custom',
+      name: customName.trim(),
+      date: customDate,
+      reason: customReason.trim(),
+      selectedAt: Date.now(),
+    };
+    onSaveSelections([...holidaySelections, newCustom]);
+    showToast(`Custom holiday "${customName.trim()}" added!`, 'success');
+    setCustomName('');
+    setCustomDate('');
+    setCustomReason('');
+  };
+
+  const removeCustomHoliday = (holId) => {
+    const updated = holidaySelections.filter(s => s.id !== holId);
+    onSaveSelections(updated);
+    showToast('Custom holiday removed', 'info');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">2026 Holiday Calendar</h2>
+          <p className="text-sm text-slate-500 mt-0.5">Fixed holidays are for everyone. Choose up to {MAX_OPTIONAL_HOLIDAYS} optional or custom festival holidays.</p>
+        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2 bg-slate-100 rounded-xl p-1">
+            <button onClick={() => setViewMode('my')} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === 'my' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>My Holidays</button>
+            <button onClick={() => setViewMode('team')} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === 'team' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`}>Team Overview</button>
+          </div>
+        )}
+      </div>
+
+      {/* Selection Counter */}
+      {viewMode === 'my' && (
+        <div className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-2xl p-5 border border-violet-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-violet-900">Your Optional Holidays</p>
+              <p className="text-xs text-violet-600 mt-0.5">
+                {selectedCount} of {MAX_OPTIONAL_HOLIDAYS} selected · {remaining > 0 ? `${remaining} remaining` : 'All slots filled'}
+              </p>
+            </div>
+            <div className="flex gap-1">
+              {Array.from({ length: MAX_OPTIONAL_HOLIDAYS }).map((_, i) => (
+                <div key={i} className={`w-3 h-3 rounded-full ${i < selectedCount ? 'bg-violet-600' : 'bg-violet-200'}`} />
+              ))}
+            </div>
+          </div>
+          <div className="w-full bg-violet-200 rounded-full h-1.5 mt-3">
+            <div className="bg-violet-600 h-1.5 rounded-full transition-all" style={{ width: `${(selectedCount / MAX_OPTIONAL_HOLIDAYS) * 100}%` }} />
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'my' ? (
+        <>
+          {/* Fixed Holidays */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-emerald-100 rounded-lg">
+                  <Shield size={16} className="text-emerald-600" />
+                </div>
+                <h3 className="font-bold text-slate-900">Fixed Holidays</h3>
+                <span className="text-xs text-slate-400 ml-1">Full day off for everyone</span>
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {FIXED_HOLIDAYS_2026.map(h => (
+                <div key={h.id} className="flex items-center gap-4 p-4 hover:bg-slate-50 transition-colors">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex flex-col items-center justify-center text-white flex-shrink-0">
+                    <span className="text-sm font-bold leading-none">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric' })}</span>
+                    <span className="text-[10px] leading-none mt-0.5">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-slate-900">{h.name}</p>
+                    <p className="text-xs text-slate-500">{h.day}, {formatDate(h.date + 'T00:00:00')}</p>
+                  </div>
+                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200">Fixed</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Optional Holidays */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-amber-100 rounded-lg">
+                  <Star size={16} className="text-amber-600" />
+                </div>
+                <h3 className="font-bold text-slate-900">Optional Holidays</h3>
+                <span className="text-xs text-slate-400 ml-1">Select up to {MAX_OPTIONAL_HOLIDAYS} based on your observance</span>
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {OPTIONAL_HOLIDAYS_2026.map(h => {
+                const selected = isOptionalSelected(h.id);
+                return (
+                  <div key={h.id} className={`flex items-center gap-4 p-4 transition-colors ${selected ? 'bg-amber-50/50' : 'hover:bg-slate-50'}`}>
+                    <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center text-white flex-shrink-0 ${
+                      selected ? 'bg-gradient-to-br from-amber-500 to-orange-500' : 'bg-slate-200'
+                    }`}>
+                      <span className={`text-sm font-bold leading-none ${!selected ? 'text-slate-600' : ''}`}>{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric' })}</span>
+                      <span className={`text-[10px] leading-none mt-0.5 ${!selected ? 'text-slate-500' : ''}`}>{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className={`font-semibold ${selected ? 'text-slate-900' : 'text-slate-700'}`}>{h.name}</p>
+                      <p className="text-xs text-slate-500">{h.day}, {formatDate(h.date + 'T00:00:00')}</p>
+                      {h.note && <p className="text-xs text-amber-600 mt-0.5">{h.note}</p>}
+                    </div>
+                    <button
+                      onClick={() => toggleOptionalHoliday(h)}
+                      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                        selected
+                          ? 'bg-amber-100 text-amber-700 border border-amber-300 hover:bg-red-50 hover:text-red-600 hover:border-red-300'
+                          : remaining > 0
+                            ? 'bg-violet-600 text-white hover:bg-violet-700'
+                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                      }`}
+                      disabled={!selected && remaining <= 0}
+                    >
+                      {selected ? '✓ Selected' : '+ Select'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Custom Festival Request */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-violet-100 rounded-lg">
+                  <Plus size={16} className="text-violet-600" />
+                </div>
+                <h3 className="font-bold text-slate-900">Request Custom Festival Holiday</h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                If your religion or festival is not listed above, add it here. This counts toward your {MAX_OPTIONAL_HOLIDAYS} optional holiday limit.
+              </p>
+            </div>
+
+            {/* Existing custom holidays */}
+            {myCustoms.length > 0 && (
+              <div className="divide-y divide-slate-100 border-b border-slate-100">
+                {myCustoms.map(c => (
+                  <div key={c.id} className="flex items-center gap-4 p-4 bg-violet-50/50">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex flex-col items-center justify-center text-white flex-shrink-0">
+                      <span className="text-sm font-bold leading-none">{new Date(c.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric' })}</span>
+                      <span className="text-[10px] leading-none mt-0.5">{new Date(c.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-slate-900">{c.name}</p>
+                      <p className="text-xs text-slate-500">{formatDate(c.date + 'T00:00:00')}</p>
+                      {c.reason && <p className="text-xs text-violet-600 mt-0.5">{c.reason}</p>}
+                    </div>
+                    <button
+                      onClick={() => removeCustomHoliday(c.id)}
+                      className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={16} className="text-red-400" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  value={customName}
+                  onChange={e => setCustomName(e.target.value)}
+                  placeholder="Festival name (e.g., Pongal, Onam)"
+                  className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                />
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={e => setCustomDate(e.target.value)}
+                  min="2026-01-01"
+                  max="2026-12-31"
+                  className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                />
+              </div>
+              <input
+                value={customReason}
+                onChange={e => setCustomReason(e.target.value)}
+                placeholder="Brief reason (optional)"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+              />
+              <button
+                onClick={addCustomHoliday}
+                disabled={!customName.trim() || !customDate || remaining <= 0}
+                className="px-5 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Plus size={16} />
+                Add Custom Holiday {remaining <= 0 ? '(No slots left)' : `(${remaining} left)`}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Team Overview (Admin) */
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100">
+            <h3 className="font-bold text-slate-900">Team Holiday Selections</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Overview of optional holidays chosen by each team member</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="text-left px-5 py-3 font-semibold text-slate-600">Employee</th>
+                  <th className="text-center px-3 py-3 font-semibold text-slate-600">Selected</th>
+                  <th className="text-left px-5 py-3 font-semibold text-slate-600">Holidays Chosen</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {employees.filter(e => e.role !== 'admin').map(emp => {
+                  const empSelections = holidaySelections.filter(s => s.employeeId === emp.id);
+                  return (
+                    <tr key={emp.id} className="hover:bg-slate-50">
+                      <td className="px-5 py-3">
+                        <p className="font-medium text-slate-900">{emp.name}</p>
+                        <p className="text-xs text-slate-400">{emp.dept || 'No dept'}</p>
+                      </td>
+                      <td className="text-center px-3 py-3">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          empSelections.length === MAX_OPTIONAL_HOLIDAYS ? 'bg-emerald-50 text-emerald-700' :
+                          empSelections.length > 0 ? 'bg-amber-50 text-amber-700' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                          {empSelections.length}/{MAX_OPTIONAL_HOLIDAYS}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3">
+                        {empSelections.length === 0 ? (
+                          <span className="text-xs text-slate-400">No holidays selected yet</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {empSelections.map(s => (
+                              <span key={s.id} className={`px-2 py-0.5 rounded-md text-xs font-medium ${
+                                s.type === 'custom' ? 'bg-violet-50 text-violet-700 border border-violet-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {s.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ============ MAIN APP ============
 export default function PocketFundDashboard() {
   // State
@@ -461,6 +919,7 @@ export default function PocketFundDashboard() {
   const [salaryRecords, setSalaryRecords] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [referrals, setReferrals] = useState([]);
+  const [holidaySelections, setHolidaySelections] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [lastSynced, setLastSynced] = useState(null);
@@ -493,7 +952,7 @@ export default function PocketFundDashboard() {
         const forceReset = false;
         
         // Data version - bump this to force a reset when schema changes
-        const DATA_VERSION = '7';
+        const DATA_VERSION = '8';
         let versionResult;
         try {
           versionResult = await storage.get('pocketfund-version');
@@ -512,6 +971,7 @@ export default function PocketFundDashboard() {
           await storage.set('pocketfund-notifications', JSON.stringify([]));
           await storage.set('pocketfund-salary', JSON.stringify([]));
           await storage.set('pocketfund-suggestions', JSON.stringify([]));
+          await storage.set('pocketfund-holidays', JSON.stringify([]));
           await storage.set('pocketfund-version', DATA_VERSION);
           try { await storage.delete('pocketfund-currentuser'); } catch(e) {}
           
@@ -523,6 +983,7 @@ export default function PocketFundDashboard() {
           setNotifications([]);
           setSalaryRecords([]);
           setSuggestions([]);
+          setHolidaySelections([]);
           setIsLoading(false);
           return;
         }
@@ -659,6 +1120,20 @@ export default function PocketFundDashboard() {
           await storage.set('pocketfund-referrals', JSON.stringify([]));
         }
 
+        // Load holiday selections
+        let holidaysResult;
+        try {
+          holidaysResult = await storage.get('pocketfund-holidays');
+        } catch (e) {
+          holidaysResult = null;
+        }
+        if (holidaysResult?.value) {
+          setHolidaySelections(JSON.parse(holidaysResult.value));
+        } else {
+          setHolidaySelections([]);
+          await storage.set('pocketfund-holidays', JSON.stringify([]));
+        }
+
         // Load current user preference
         let userResult;
         try {
@@ -682,7 +1157,7 @@ export default function PocketFundDashboard() {
   const refreshData = useCallback(async (silent = true) => {
     if (!silent) setIsSyncing(true);
     try {
-      const [empR, tktR, lvR, actR, annR, ntfR, salR, sugR, refR] = await Promise.all([
+      const [empR, tktR, lvR, actR, annR, ntfR, salR, sugR, refR, holR] = await Promise.all([
         storage.get('pocketfund-employees'),
         storage.get('pocketfund-tickets'),
         storage.get('pocketfund-leaves'),
@@ -692,6 +1167,7 @@ export default function PocketFundDashboard() {
         storage.get('pocketfund-salary'),
         storage.get('pocketfund-suggestions'),
         storage.get('pocketfund-referrals').catch(() => null),
+        storage.get('pocketfund-holidays').catch(() => null),
       ]);
       if (empR?.value) setEmployees(JSON.parse(empR.value));
       if (tktR?.value) setTickets(JSON.parse(tktR.value));
@@ -702,6 +1178,7 @@ export default function PocketFundDashboard() {
       if (salR?.value) setSalaryRecords(JSON.parse(salR.value));
       if (sugR?.value) setSuggestions(JSON.parse(sugR.value));
       if (refR?.value) setReferrals(JSON.parse(refR.value));
+      if (holR?.value) setHolidaySelections(JSON.parse(holR.value));
       setLastSynced(new Date());
     } catch (e) {
       console.error('Sync failed:', e);
@@ -771,6 +1248,12 @@ export default function PocketFundDashboard() {
   const saveReferrals = async (newReferrals) => {
     setReferrals(newReferrals);
     await storage.set('pocketfund-referrals', JSON.stringify(newReferrals));
+  };
+
+  // Save holiday selections
+  const saveHolidaySelections = async (newSelections) => {
+    setHolidaySelections(newSelections);
+    await storage.set('pocketfund-holidays', JSON.stringify(newSelections));
   };
 
   // Add notification helper
@@ -1382,6 +1865,7 @@ export default function PocketFundDashboard() {
               { id: 'announcements', name: 'Announcements', icon: Megaphone },
               { id: 'suggestions', name: 'Suggestions', icon: MessageCircle },
               { id: 'referrals', name: 'Referrals', icon: UserCheck },
+              { id: 'holidays', name: 'Holidays', icon: Star },
               ...(isAdmin ? [
                 { id: 'team', name: 'Team Members', icon: Users },
                 { id: 'analytics', name: 'Analytics', icon: BarChart3 }
@@ -1557,6 +2041,67 @@ export default function PocketFundDashboard() {
                   icon={Calendar}
                   color="bg-gradient-to-br from-amber-500 to-orange-500"
                 />
+              </div>
+
+              {/* Calendar & Upcoming Holidays */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+                {/* Mini Calendar */}
+                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-violet-50 rounded-xl">
+                        <Calendar size={18} className="text-violet-600" />
+                      </div>
+                      <h3 className="font-bold text-slate-900">Calendar</h3>
+                    </div>
+                    <button onClick={() => setActiveTab('holidays')} className="text-xs text-violet-600 font-medium hover:text-violet-700">
+                      All Holidays →
+                    </button>
+                  </div>
+                  <DashboardCalendar
+                    holidaySelections={holidaySelections}
+                    currentUser={currentUser}
+                  />
+                </div>
+
+                {/* Upcoming Holidays */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <div className="p-5 border-b border-slate-100">
+                    <h3 className="font-bold text-slate-900">Upcoming Holidays</h3>
+                  </div>
+                  <div className="p-4 space-y-3 max-h-80 overflow-y-auto">
+                    {(() => {
+                      const today = new Date().toISOString().split('T')[0];
+                      const myOptionals = holidaySelections.filter(s => s.employeeId === currentUser?.id).map(s => s.holidayId);
+                      const upcoming = ALL_HOLIDAYS_2026.filter(h => {
+                        if (h.date < today) return false;
+                        if (h.type === 'fixed') return true;
+                        if (h.type === 'optional' && myOptionals.includes(h.id)) return true;
+                        if (h.type === 'custom') return true;
+                        return false;
+                      }).slice(0, 6);
+                      if (upcoming.length === 0) return (
+                        <p className="text-sm text-slate-400 text-center py-4">No upcoming holidays</p>
+                      );
+                      return upcoming.map(h => (
+                        <div key={h.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
+                          <div className={`w-10 h-10 rounded-xl flex flex-col items-center justify-center text-white ${
+                            h.type === 'fixed' ? 'bg-gradient-to-br from-emerald-500 to-green-600' :
+                            h.type === 'optional' ? 'bg-gradient-to-br from-amber-500 to-orange-500' :
+                            'bg-gradient-to-br from-violet-500 to-purple-600'
+                          }`}>
+                            <span className="text-xs font-bold leading-none">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric' })}</span>
+                            <span className="text-[10px] leading-none mt-0.5">{new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-900 truncate">{h.name}</p>
+                            <p className="text-xs text-slate-400">{h.day} · {h.type === 'fixed' ? 'Fixed' : h.type === 'optional' ? 'Your Pick' : 'Custom'}</p>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
               </div>
 
               {/* Pinned Announcements Banner */}
@@ -2644,6 +3189,19 @@ export default function PocketFundDashboard() {
               onCreateReferral={() => setShowNewReferralModal(true)}
               onUpdateReferral={handleUpdateReferral}
               onDeleteReferral={handleDeleteReferral}
+            />
+          )}
+
+          {/* Holidays Tab */}
+          {activeTab === 'holidays' && (
+            <HolidaysPage
+              currentUser={currentUser}
+              isAdmin={isAdmin}
+              holidaySelections={holidaySelections}
+              onSaveSelections={saveHolidaySelections}
+              employees={employees}
+              getEmployee={getEmployee}
+              showToast={showToast}
             />
           )}
 
