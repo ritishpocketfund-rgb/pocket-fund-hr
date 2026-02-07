@@ -1371,7 +1371,7 @@ export default function PocketFundDashboard() {
 
   // Unread notification count
   const unreadNotifCount = useMemo(() => {
-    return notifications.filter(n => !n.read && (!n.forUser || n.forUser === currentUser?.id || n.forUser === 'all' || (n.forUsers && n.forUsers.includes(currentUser?.id)))).length;
+    return notifications.filter(n => !n.read && ((!n.forUser && !n.forUsers) || n.forUser === currentUser?.id || n.forUser === 'all' || (n.forUsers && n.forUsers.includes(currentUser?.id)))).length;
   }, [notifications, currentUser]);
 
   // Show toast
@@ -1461,6 +1461,22 @@ export default function PocketFundDashboard() {
     
     if (updates.status) {
       await addActivity({ type: 'status_changed', ticketId, by: currentUser.id, newStatus: updates.status });
+      
+      // Notify relevant parties on status changes
+      const ticket = tickets.find(t => t.id === ticketId);
+      if (ticket) {
+        const adminIdsForStatus = employees.filter(e => e.role === 'admin').map(e => e.id);
+        if (updates.status === 'Closed' && currentUser.role === 'employee') {
+          // Employee closed their ticket — notify admins
+          await addNotification({ type: 'ticket_update', title: 'Ticket Closed', message: `${currentUser.name} closed ticket: ${ticket.title}`, forUsers: adminIdsForStatus, relatedId: ticketId });
+        } else if (updates.status === 'Open' && currentUser.role === 'employee') {
+          // Employee reopened their ticket — notify admins
+          await addNotification({ type: 'ticket_update', title: 'Ticket Reopened', message: `${currentUser.name} reopened ticket: ${ticket.title}`, forUsers: adminIdsForStatus, relatedId: ticketId });
+        } else if (updates.status === 'Resolved' && currentUser.role === 'admin') {
+          // Admin resolved a ticket — notify the employee
+          await addNotification({ type: 'ticket_update', title: 'Ticket Resolved', message: `Your ticket "${ticket.title}" has been resolved`, forUser: ticket.employeeId, relatedId: ticketId });
+        }
+      }
     }
     if (updates.assignedTo && updates.assignedTo !== tickets.find(t => t.id === ticketId)?.assignedTo) {
       await addActivity({ type: 'ticket_assigned', ticketId, by: currentUser.id, to: updates.assignedTo });
@@ -3469,7 +3485,7 @@ export default function PocketFundDashboard() {
         title="Notifications"
       >
         <NotificationPanel
-          notifications={notifications.filter(n => !n.forUser || n.forUser === currentUser?.id || n.forUser === 'all' || (n.forUsers && n.forUsers.includes(currentUser?.id)))}
+          notifications={notifications.filter(n => (!n.forUser && !n.forUsers) || n.forUser === currentUser?.id || n.forUser === 'all' || (n.forUsers && n.forUsers.includes(currentUser?.id)))}
           onMarkRead={markNotificationRead}
           onMarkAllRead={markAllNotificationsRead}
           onClearAll={clearAllNotifications}
@@ -4462,6 +4478,36 @@ function TicketDetailPanel({ ticket, currentUser, employees, getEmployee, onUpda
                   ★
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Close Ticket — Employee can close their resolved ticket */}
+        {!isAdmin && ticket.status === 'Resolved' && (
+          <div className="p-5 border-b border-slate-100">
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <p className="text-sm text-emerald-800 mb-3">Your ticket has been resolved. If you're satisfied, you can close it. If not, add a comment to reopen the conversation.</p>
+              <button
+                onClick={() => onUpdate(ticket.id, { status: 'Closed' })}
+                className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors text-sm flex items-center gap-2"
+              >
+                <CheckCircle2 size={16} /> Close Ticket
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Reopen — Employee can reopen a closed ticket */}
+        {!isAdmin && ticket.status === 'Closed' && (
+          <div className="p-5 border-b border-slate-100">
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+              <p className="text-sm text-slate-600 mb-3">This ticket is closed. If your issue isn't resolved, you can reopen it.</p>
+              <button
+                onClick={() => onUpdate(ticket.id, { status: 'Open' })}
+                className="px-5 py-2.5 bg-slate-600 text-white rounded-xl font-semibold hover:bg-slate-700 transition-colors text-sm flex items-center gap-2"
+              >
+                <RefreshCw size={16} /> Reopen Ticket
+              </button>
             </div>
           </div>
         )}
