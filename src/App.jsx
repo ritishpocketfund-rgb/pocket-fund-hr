@@ -76,6 +76,44 @@ const ALL_HOLIDAYS_2026 = [
 const GENDER_OPTIONS = ['Male', 'Female', 'Other', 'Prefer not to say'];
 const INDIAN_STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Chandigarh','Puducherry','Jammu & Kashmir','Ladakh'];
 
+const COUNTRIES = ['India', 'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France', 'Singapore', 'UAE', 'Japan', 'South Korea', 'Netherlands', 'Ireland', 'New Zealand', 'Other'];
+
+const COUNTRY_STATES = {
+  'India': INDIAN_STATES,
+  'United States': ['Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming','District of Columbia'],
+  'United Kingdom': ['England','Scotland','Wales','Northern Ireland'],
+  'Canada': ['Alberta','British Columbia','Manitoba','New Brunswick','Newfoundland and Labrador','Nova Scotia','Ontario','Prince Edward Island','Quebec','Saskatchewan','Northwest Territories','Nunavut','Yukon'],
+  'Australia': ['New South Wales','Victoria','Queensland','South Australia','Western Australia','Tasmania','Australian Capital Territory','Northern Territory'],
+  'Germany': ['Baden-Württemberg','Bavaria','Berlin','Brandenburg','Bremen','Hamburg','Hesse','Lower Saxony','Mecklenburg-Vorpommern','North Rhine-Westphalia','Rhineland-Palatinate','Saarland','Saxony','Saxony-Anhalt','Schleswig-Holstein','Thuringia'],
+  'France': ['Île-de-France','Provence-Alpes-Côte d\'Azur','Auvergne-Rhône-Alpes','Nouvelle-Aquitaine','Occitanie','Hauts-de-France','Grand Est','Pays de la Loire','Brittany','Normandy','Burgundy-Franche-Comté','Centre-Val de Loire','Corsica'],
+  'Singapore': ['Central Region','East Region','North Region','North-East Region','West Region'],
+  'UAE': ['Abu Dhabi','Dubai','Sharjah','Ajman','Umm Al Quwain','Ras Al Khaimah','Fujairah'],
+  'Japan': ['Tokyo','Osaka','Kyoto','Hokkaido','Aichi','Fukuoka','Kanagawa','Hyogo','Saitama','Chiba'],
+  'South Korea': ['Seoul','Busan','Incheon','Daegu','Daejeon','Gwangju','Ulsan','Sejong','Gyeonggi','Jeju'],
+  'Netherlands': ['North Holland','South Holland','Utrecht','North Brabant','Gelderland','Overijssel','Limburg','Flevoland','Groningen','Friesland','Drenthe','Zeeland'],
+  'Ireland': ['Dublin','Cork','Galway','Limerick','Waterford','Kerry','Wicklow','Donegal','Mayo','Clare','Kildare','Meath','Tipperary'],
+  'New Zealand': ['Auckland','Wellington','Canterbury','Waikato','Bay of Plenty','Manawatu-Wanganui','Otago','Hawke\'s Bay','Taranaki','Northland','Southland'],
+};
+
+const COUNTRY_POSTAL_CONFIG = {
+  'India': { label: 'Pincode', placeholder: '6-digit pincode', maxLen: 6, regex: /\D/g },
+  'United States': { label: 'ZIP Code', placeholder: '5-digit ZIP', maxLen: 5, regex: /\D/g },
+  'United Kingdom': { label: 'Postcode', placeholder: 'e.g. SW1A 1AA', maxLen: 8, regex: /[^A-Za-z0-9 ]/g },
+  'Canada': { label: 'Postal Code', placeholder: 'e.g. K1A 0B1', maxLen: 7, regex: /[^A-Za-z0-9 ]/g },
+  'Australia': { label: 'Postcode', placeholder: '4-digit', maxLen: 4, regex: /\D/g },
+  'Germany': { label: 'PLZ', placeholder: '5-digit', maxLen: 5, regex: /\D/g },
+  'France': { label: 'Code Postal', placeholder: '5-digit', maxLen: 5, regex: /\D/g },
+  'Singapore': { label: 'Postal Code', placeholder: '6-digit', maxLen: 6, regex: /\D/g },
+  'UAE': { label: 'P.O. Box', placeholder: 'P.O. Box number', maxLen: 10, regex: /\D/g },
+  'Japan': { label: 'Postal Code', placeholder: '7-digit', maxLen: 8, regex: /[^0-9-]/g },
+  'South Korea': { label: 'Postal Code', placeholder: '5-digit', maxLen: 5, regex: /\D/g },
+  'Netherlands': { label: 'Postcode', placeholder: 'e.g. 1234 AB', maxLen: 7, regex: /[^A-Za-z0-9 ]/g },
+  'Ireland': { label: 'Eircode', placeholder: 'e.g. D02 AF30', maxLen: 7, regex: /[^A-Za-z0-9 ]/g },
+  'New Zealand': { label: 'Postcode', placeholder: '4-digit', maxLen: 4, regex: /\D/g },
+};
+const getPostalConfig = (country) => COUNTRY_POSTAL_CONFIG[country] || { label: 'Postal Code', placeholder: 'Postal/ZIP code', maxLen: 10, regex: /[^A-Za-z0-9 -]/g };
+const getStatesForCountry = (country) => COUNTRY_STATES[country] || [];
+
 // Default extended profile fields
 const DEFAULT_EXTENDED_PROFILE = {
   gender: '',
@@ -949,10 +987,11 @@ export default function PocketFundDashboard() {
     const loadData = async () => {
       try {
         // FORCE FRESH START - Clear all old data and start clean
-        // Set to true only when you need to reset all data
+        // Set to true ONLY when you intentionally want to wipe everything
         const forceReset = false;
         
-        // Data version - bump this to force a reset when schema changes
+        // Data version — bump this when adding new storage keys
+        // IMPORTANT: This now does ADDITIVE migration only (no data wipe)
         const DATA_VERSION = '8';
         let versionResult;
         try {
@@ -961,9 +1000,11 @@ export default function PocketFundDashboard() {
           versionResult = null;
         }
         
-        const needsReset = forceReset || !versionResult?.value || versionResult.value !== DATA_VERSION;
+        const isFirstLoad = !versionResult?.value;
+        const needsMigration = versionResult?.value && versionResult.value !== DATA_VERSION;
         
-        if (needsReset) {
+        if (forceReset) {
+          // Only runs if you explicitly set forceReset = true
           await storage.set('pocketfund-employees', JSON.stringify(INITIAL_EMPLOYEES));
           await storage.set('pocketfund-tickets', JSON.stringify([]));
           await storage.set('pocketfund-leaves', JSON.stringify([]));
@@ -987,6 +1028,53 @@ export default function PocketFundDashboard() {
           setHolidaySelections([]);
           setIsLoading(false);
           return;
+        }
+
+        if (isFirstLoad) {
+          // First time ever — initialize all storage keys
+          await storage.set('pocketfund-employees', JSON.stringify(INITIAL_EMPLOYEES));
+          await storage.set('pocketfund-tickets', JSON.stringify([]));
+          await storage.set('pocketfund-leaves', JSON.stringify([]));
+          await storage.set('pocketfund-activities', JSON.stringify([]));
+          await storage.set('pocketfund-announcements', JSON.stringify([]));
+          await storage.set('pocketfund-notifications', JSON.stringify([]));
+          await storage.set('pocketfund-salary', JSON.stringify([]));
+          await storage.set('pocketfund-suggestions', JSON.stringify([]));
+          await storage.set('pocketfund-holidays', JSON.stringify([]));
+          await storage.set('pocketfund-version', DATA_VERSION);
+          
+          setEmployees(INITIAL_EMPLOYEES);
+          setTickets([]);
+          setLeaves([]);
+          setActivities([]);
+          setAnnouncements([]);
+          setNotifications([]);
+          setSalaryRecords([]);
+          setSuggestions([]);
+          setHolidaySelections([]);
+          setIsLoading(false);
+          return;
+        }
+
+        if (needsMigration) {
+          // Additive migration — only initialize NEW keys that don't exist yet
+          // This preserves all existing data (leaves, profiles, tickets, etc.)
+          const keysToEnsure = [
+            'pocketfund-employees', 'pocketfund-tickets', 'pocketfund-leaves',
+            'pocketfund-activities', 'pocketfund-announcements', 'pocketfund-notifications',
+            'pocketfund-salary', 'pocketfund-suggestions', 'pocketfund-holidays',
+          ];
+          for (const key of keysToEnsure) {
+            try {
+              const existing = await storage.get(key);
+              if (!existing?.value) {
+                await storage.set(key, key === 'pocketfund-employees' ? JSON.stringify(INITIAL_EMPLOYEES) : JSON.stringify([]));
+              }
+            } catch (e) {
+              await storage.set(key, key === 'pocketfund-employees' ? JSON.stringify(INITIAL_EMPLOYEES) : JSON.stringify([]));
+            }
+          }
+          await storage.set('pocketfund-version', DATA_VERSION);
         }
 
         // Load employees/users
@@ -1855,8 +1943,8 @@ export default function PocketFundDashboard() {
           </div>
         </div>
 
-        <nav className="flex-1 px-3">
-          <div className="space-y-1">
+        <nav className="flex-1 px-3 overflow-y-auto">
+          <div className="space-y-1 pb-2">
             {[
               { id: 'dashboard', name: 'Dashboard', icon: Home },
               { id: 'tickets', name: 'Tickets', icon: MessageSquare },
@@ -3553,8 +3641,10 @@ function ProfileSetupScreen({ currentUser, onComplete, onLogout, toast, setToast
     } else if (step === 2) {
       if (!profileData.address.line1.trim()) { setError('Address is required'); return false; }
       if (!profileData.address.city.trim()) { setError('City is required'); return false; }
-      if (!profileData.address.state) { setError('State is required'); return false; }
-      if (!profileData.address.pincode || profileData.address.pincode.length !== 6) { setError('Valid 6-digit pincode is required'); return false; }
+      if (!profileData.address.country) { setError('Country is required'); return false; }
+      const statesAvailable = getStatesForCountry(profileData.address.country);
+      if (statesAvailable.length > 0 && !profileData.address.state) { setError('State/Province is required'); return false; }
+      if (!profileData.address.pincode) { setError('Postal/ZIP code is required'); return false; }
     } else if (step === 3) {
       if (!profileData.emergencyContact.name.trim()) { setError('Emergency contact name is required'); return false; }
       if (!profileData.emergencyContact.phone || profileData.emergencyContact.phone.length < 10) { setError('Valid emergency phone is required'); return false; }
@@ -3671,6 +3761,13 @@ function ProfileSetupScreen({ currentUser, onComplete, onLogout, toast, setToast
               <div className="space-y-4">
                 <h3 className="font-bold text-slate-900 flex items-center gap-2"><MapPin size={18} className="text-violet-600" /> Home Address</h3>
                 <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Country *</label>
+                  <select value={profileData.address.country} onChange={e => { updateAddress('country', e.target.value); updateAddress('state', ''); }} className={inputCls}>
+                    <option value="">Select Country</option>
+                    {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Address Line *</label>
                   <input type="text" value={profileData.address.line1} onChange={e => updateAddress('line1', e.target.value)} placeholder="House/Flat No., Street, Area" className={inputCls} />
                 </div>
@@ -3684,19 +3781,21 @@ function ProfileSetupScreen({ currentUser, onComplete, onLogout, toast, setToast
                     <input type="text" value={profileData.address.city} onChange={e => updateAddress('city', e.target.value)} placeholder="City" className={inputCls} />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">State *</label>
-                    <select value={profileData.address.state} onChange={e => updateAddress('state', e.target.value)} className={inputCls}>
-                      <option value="">Select State</option>
-                      {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">State / Province {getStatesForCountry(profileData.address.country).length > 0 ? '*' : ''}</label>
+                    {getStatesForCountry(profileData.address.country).length > 0 ? (
+                      <select value={profileData.address.state} onChange={e => updateAddress('state', e.target.value)} className={inputCls}>
+                        <option value="">Select</option>
+                        {getStatesForCountry(profileData.address.country).map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : (
+                      <input type="text" value={profileData.address.state} onChange={e => updateAddress('state', e.target.value)} placeholder="State/Province" className={inputCls} />
+                    )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Pincode *</label>
-                    <input type="text" value={profileData.address.pincode} onChange={e => updateAddress('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Country</label>
-                    <input type="text" value={profileData.address.country} onChange={e => updateAddress('country', e.target.value)} className={inputCls} />
+                    {(() => { const pc = getPostalConfig(profileData.address.country); return (<>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">{pc.label} *</label>
+                      <input type="text" value={profileData.address.pincode} onChange={e => updateAddress('pincode', e.target.value.replace(pc.regex, '').slice(0, pc.maxLen))} placeholder={pc.placeholder} className={inputCls} />
+                    </>); })()}
                   </div>
                 </div>
               </div>
@@ -5273,6 +5372,13 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
             </div>
             <div className="p-6 space-y-4">
               <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Country</label>
+                <select value={profileData.address.country} onChange={e => { updateAddress('country', e.target.value); updateAddress('state', ''); }} className={inputCls}>
+                  <option value="">Select Country</option>
+                  {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Address Line</label>
                 <input type="text" value={profileData.address.line1} onChange={e => updateAddress('line1', e.target.value)} placeholder="House/Flat No., Street, Area" className={inputCls} />
               </div>
@@ -5286,19 +5392,21 @@ function SettingsPage({ currentUser, onUpdateProfile, onUpdateSettings, onLogout
                   <input type="text" value={profileData.address.city} onChange={e => updateAddress('city', e.target.value)} className={inputCls} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">State</label>
-                  <select value={profileData.address.state} onChange={e => updateAddress('state', e.target.value)} className={inputCls}>
-                    <option value="">Select State</option>
-                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">State / Province</label>
+                  {getStatesForCountry(profileData.address.country).length > 0 ? (
+                    <select value={profileData.address.state} onChange={e => updateAddress('state', e.target.value)} className={inputCls}>
+                      <option value="">Select</option>
+                      {getStatesForCountry(profileData.address.country).map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  ) : (
+                    <input type="text" value={profileData.address.state} onChange={e => updateAddress('state', e.target.value)} placeholder="State/Province" className={inputCls} />
+                  )}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Pincode</label>
-                  <input type="text" value={profileData.address.pincode} onChange={e => updateAddress('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit" className={inputCls} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Country</label>
-                  <input type="text" value={profileData.address.country} onChange={e => updateAddress('country', e.target.value)} className={inputCls} />
+                  {(() => { const pc = getPostalConfig(profileData.address.country); return (<>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">{pc.label}</label>
+                    <input type="text" value={profileData.address.pincode} onChange={e => updateAddress('pincode', e.target.value.replace(pc.regex, '').slice(0, pc.maxLen))} placeholder={pc.placeholder} className={inputCls} />
+                  </>); })()}
                 </div>
               </div>
               <div className="pt-4 border-t border-slate-100">
@@ -6812,16 +6920,25 @@ function EmployeeDetailPanel({ employee, onUpdate }) {
 
           <div className="bg-slate-50 rounded-xl p-4 space-y-2">
             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><MapPin size={13}/> Address</h4>
+            <select value={editData.address?.country || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, country: e.target.value, state: '' } }))} className={inputCls}>
+              <option value="">Country</option>
+              {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
             <input type="text" value={editData.address?.line1 || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, line1: e.target.value } }))} placeholder="Address" className={inputCls} />
             <input type="text" value={editData.address?.landmark || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, landmark: e.target.value } }))} placeholder="Landmark" className={inputCls} />
             <div className="grid grid-cols-2 gap-2">
               <input type="text" value={editData.address?.city || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, city: e.target.value } }))} placeholder="City" className={inputCls} />
-              <select value={editData.address?.state || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, state: e.target.value } }))} className={inputCls}>
-                <option value="">State</option>
-                {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <input type="text" value={editData.address?.pincode || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) } }))} placeholder="Pincode" className={inputCls} />
-              <input type="text" value={editData.address?.country || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, country: e.target.value } }))} placeholder="Country" className={inputCls} />
+              {getStatesForCountry(editData.address?.country).length > 0 ? (
+                <select value={editData.address?.state || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, state: e.target.value } }))} className={inputCls}>
+                  <option value="">State/Province</option>
+                  {getStatesForCountry(editData.address?.country).map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              ) : (
+                <input type="text" value={editData.address?.state || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, state: e.target.value } }))} placeholder="State/Province" className={inputCls} />
+              )}
+              {(() => { const pc = getPostalConfig(editData.address?.country); return (
+                <input type="text" value={editData.address?.pincode || ''} onChange={e => setEditData(d => ({ ...d, address: { ...d.address, pincode: e.target.value.replace(pc.regex, '').slice(0, pc.maxLen) } }))} placeholder={pc.placeholder} className={inputCls} />
+              ); })()}
             </div>
           </div>
 
