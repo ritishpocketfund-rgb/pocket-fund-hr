@@ -1401,6 +1401,19 @@ export default function PocketFundDashboard() {
     showToast(`Profile set up! Welcome, ${updatedUser.name}!`);
   };
 
+  // Skip profile setup — mark as complete so they can use the app, they can fill details later in Settings
+  const handleSkipProfile = async () => {
+    const updatedUser = { ...currentUser, profileComplete: true };
+    setCurrentUser(updatedUser);
+    await storage.set('pocketfund-currentuser', JSON.stringify(updatedUser));
+    
+    const newEmployees = employees.map(e => 
+      e.id === updatedUser.id ? { ...e, profileComplete: true } : e
+    );
+    await saveEmployees(newEmployees);
+    showToast(`Welcome, ${updatedUser.name}! You can complete your profile later in Settings.`);
+  };
+
   // Logout handler
   const handleLogout = async () => {
     setCurrentUser(null);
@@ -1922,6 +1935,7 @@ export default function PocketFundDashboard() {
       <ProfileSetupScreen
         currentUser={currentUser}
         onComplete={handleCompleteProfile}
+        onSkip={handleSkipProfile}
         onLogout={handleLogout}
         toast={toast}
         setToast={setToast}
@@ -3610,7 +3624,7 @@ function AuthScreen({ employees, onLogin, toast, setToast }) {
 }
 
 // ============ PROFILE SETUP SCREEN (First Login) ============
-function ProfileSetupScreen({ currentUser, onComplete, onLogout, toast, setToast }) {
+function ProfileSetupScreen({ currentUser, onComplete, onSkip, onLogout, toast, setToast }) {
   const [step, setStep] = useState(1);
   const totalSteps = 4;
   const [error, setError] = useState('');
@@ -3860,13 +3874,19 @@ function ProfileSetupScreen({ currentUser, onComplete, onLogout, toast, setToast
 
             {/* Navigation Buttons */}
             <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-              {step > 1 ? (
-                <button onClick={handleBack} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors">
-                  <ChevronLeft size={16} /> Back
+              <div className="flex items-center gap-3">
+                {step > 1 ? (
+                  <button onClick={handleBack} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors">
+                    <ChevronLeft size={16} /> Back
+                  </button>
+                ) : (
+                  <button onClick={onLogout} className="text-sm text-slate-400 hover:text-slate-600 transition-colors">Sign out</button>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={onSkip} className="text-sm text-slate-400 hover:text-slate-600 transition-colors">
+                  Skip for now
                 </button>
-              ) : (
-                <button onClick={onLogout} className="text-sm text-slate-400 hover:text-slate-600 transition-colors">Sign out</button>
-              )}
               {step < totalSteps ? (
                 <button onClick={handleNext} className="px-6 py-2.5 bg-violet-600 text-white rounded-xl font-semibold hover:bg-violet-700 transition-colors text-sm flex items-center gap-1.5">
                   Next <ChevronRight size={16} />
@@ -3876,6 +3896,7 @@ function ProfileSetupScreen({ currentUser, onComplete, onLogout, toast, setToast
                   Complete Setup →
                 </button>
               )}
+              </div>
             </div>
           </div>
         </div>
