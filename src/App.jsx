@@ -30,7 +30,7 @@ const formatDateTime = (date) => {
 const ALLOWED_DOMAINS = ['pocket-fund.com', 'pocketfund.org'];
 
 // ============ INITIAL DATA ============
-const DEPARTMENTS = ['Business Analyst', 'Marketing', 'Tech', 'HR', 'Admin', 'Finance', 'Other'];
+const DEPARTMENTS = ['Business Analyst', 'Marketing', 'Tech', 'HR', 'Admin', 'Finance', 'Private Equity', "Founder's Office", 'Social Media', 'Other'];
 const TICKET_TYPES = ['Complaint', 'Suggestion', 'General Query'];
 const TICKET_CATEGORIES = ['HR', 'Payroll', 'Tech/Tools', 'Operations', 'Management', 'Work Culture', 'Other'];
 const PRIORITIES = ['Low', 'Medium', 'High'];
@@ -138,24 +138,22 @@ const SALARY_STATUS_CONFIG = {
 // Pre-registered users with 6-digit passcodes
 const INITIAL_EMPLOYEES = [
   { id: 'ADMIN-001', name: 'Pocket Fund Admin', email: 'hello@pocket-fund.com', passcode: '920537', dept: 'Management', role: 'admin', profileComplete: true, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-001', name: 'Aabhas', email: 'aabhas@pocketfund.org', passcode: '847291', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-002', name: 'Anmol', email: 'anmol@pocketfund.org', passcode: '362518', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-003', name: 'Aryan Solanki', email: 'aryan.solanki@pocketfund.org', passcode: '591734', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-004', name: 'Darshana', email: 'darshana@pocketfund.org', passcode: '428163', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-005', name: 'Aum', email: 'aum@pocket-fund.com', passcode: '735926', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-001', name: 'Aabhas Tandon', email: 'aabhas@pocketfund.org', passcode: '847291', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2005-02-09', phone: '9637134494', address: { line1: 'Pimple Saudagar', landmark: '', city: 'Pune', state: 'Maharashtra', pincode: '411027', country: 'India' }, emergencyContact: { name: 'Ashish Tandon', phone: '9892430665', relation: 'Father' }, bankDetails: { holderName: 'Aabhas Tandon', accountNumber: '50100111555295', ifsc: 'HDFC0002524', bankName: 'HDFC Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-002', name: 'Anmol Birla', email: 'anmol@pocketfund.org', passcode: '362518', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2005-08-18', phone: '9374979811', address: { line1: 'Chandapura - Anekal Road, Iggalur', landmark: '', city: 'Bengaluru', state: 'Karnataka', pincode: '', country: 'India' }, emergencyContact: { name: 'Deepak Birla', phone: '9327979811', relation: 'Father' }, bankDetails: { holderName: 'Anmol Birla', accountNumber: '2111395860', ifsc: 'KKBK0000877', bankName: 'Kotak Mahindra Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-003', name: 'Aryan Solanki', email: 'aryan.solanki@pocketfund.org', passcode: '591734', dept: 'Social Media', role: 'employee', profileComplete: true, gender: 'Male', dob: '2006-10-08', phone: '9324270645', address: { line1: 'Vasant Vihar, Hiranandani Meadows', landmark: '', city: 'Thane', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Nita Solanki', phone: '9892770198', relation: 'Mother' }, bankDetails: { holderName: 'Aryan Solanki', accountNumber: '0753104000132398', ifsc: 'IBKL0000753', bankName: 'IDBI Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-004', name: 'Darshana Yadav', email: 'darshana@pocketfund.org', passcode: '428163', dept: 'Private Equity', role: 'employee', profileComplete: true, gender: 'Female', dob: '2001-02-26', phone: '9131632066', address: { line1: 'Indra Chouk, L.I.G Colony', landmark: 'Behind M.I.G Thana', city: 'LIG Square', state: 'Madhya Pradesh', pincode: '', country: 'India' }, emergencyContact: { name: 'Vandana Yadav', phone: '9575758526', relation: 'Mother' }, bankDetails: { holderName: 'Darshana Yadav', accountNumber: '50100483495737', ifsc: 'HDFC0003886', bankName: 'HDFC Ltd.', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-005', name: 'Aum Thakarkar', email: 'aum@pocket-fund.com', passcode: '735926', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2004-03-29', phone: '9372589413', address: { line1: 'Sector 35G, Near Tata Memorial Hospital', landmark: '', city: 'Kharghar', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Dhananjay Thakarkar', phone: '9820232340', relation: 'Father' }, bankDetails: { holderName: 'Aum Thakarkar', accountNumber: '30040100012014', ifsc: 'BARB0KHARGA', bankName: 'Bank Of Baroda', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
   { id: 'EMP-006', name: 'Dev', email: 'dev@pocket-fund.com', passcode: '614852', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-007', name: 'Ganesh', email: 'ganesh@pocketfund.org', passcode: '283947', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-008', name: 'Harish', email: 'harish@pocketfund.org', passcode: '952361', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-009', name: 'Kavya', email: 'kavya@pocketfund.org', passcode: '174639', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-010', name: 'Manas', email: 'manas@pocketfund.org', passcode: '839274', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-007', name: 'Ganesh Jagtap', email: 'ganesh@pocketfund.org', passcode: '283947', dept: 'Tech', role: 'employee', profileComplete: true, gender: 'Male', dob: '2002-09-10', phone: '9403383305', address: { line1: 'Plot no 84, N2, CIDCO', landmark: '', city: 'Aurangabad', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Ratnaprabha Jagtap', phone: '9518553084', relation: 'Mother' }, bankDetails: { holderName: 'Ganesh Jagtap', accountNumber: '0246752008', ifsc: 'KKBK0001946', bankName: 'Kotak Mahindra Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-008', name: 'Harish Sreepathi', email: 'harish@pocketfund.org', passcode: '952361', dept: 'Finance', role: 'employee', profileComplete: true, gender: 'Male', dob: '2002-08-14', phone: '9346632900', address: { line1: 'Lake View Towers, Nalagandla', landmark: '', city: 'Hyderabad', state: 'Telangana', pincode: '', country: 'India' }, emergencyContact: { name: '', phone: '9346632900', relation: 'Brother' }, bankDetails: { holderName: 'Harish Sreepathi', accountNumber: '50100622605620', ifsc: 'HDFC0003781', bankName: 'HDFC Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-009', name: 'Kavya Sharma', email: 'kavya@pocketfund.org', passcode: '174639', dept: 'Finance', role: 'employee', profileComplete: true, gender: 'Female', dob: '2003-03-07', phone: '7303286464', address: { line1: 'Jasola Vihar, Pocket 12', landmark: '', city: 'New Delhi', state: 'Delhi', pincode: '110025', country: 'India' }, emergencyContact: { name: 'Kartikeya', phone: '8851470544', relation: 'Brother' }, bankDetails: { holderName: 'Kavya Sharma', accountNumber: '50100674455491', ifsc: 'HDFC0000271', bankName: 'HDFC', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-010', name: 'Manas Kogta', email: 'manas@pocketfund.org', passcode: '839274', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2002-05-27', phone: '9604994499', address: { line1: 'Charni Road', landmark: '', city: 'Mumbai', state: 'Maharashtra', pincode: '400004', country: 'India' }, emergencyContact: { name: 'Rajesh Kogta', phone: '9423141750', relation: 'Father' }, bankDetails: { holderName: 'Manas Kogta', accountNumber: '39746680636', ifsc: 'SBIN0005935', bankName: 'SBI', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
   { id: 'EMP-011', name: 'Neil', email: 'neil@pocketfund.org', passcode: '461582', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-012', name: 'Pushkar', email: 'pushkar@pocketfund.org', passcode: '527193', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-013', name: 'Raghav', email: 'raghav@pocketfund.org', passcode: '698415', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-014', name: 'Rahul', email: 'rahul@pocketfund.org', passcode: '345876', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-015', name: 'Ritish', email: 'ritish@pocketfund.org', passcode: '713248', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-012', name: 'Pushkar Rathod', email: 'pushkar@pocketfund.org', passcode: '527193', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2005-07-12', phone: '7249412705', address: { line1: 'Fitwala Road, Near Elphinstone Bridge, Prabhadevi', landmark: '', city: 'Mumbai', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Kalpesh', phone: '8149477749', relation: 'Father' }, bankDetails: { holderName: 'Pushkar Rathod', accountNumber: '41433499749', ifsc: 'SBIN0000437', bankName: 'State Bank Of India', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-013', name: 'Raghav Krishna', email: 'raghav@pocketfund.org', passcode: '698415', dept: 'Tech', role: 'employee', profileComplete: true, gender: 'Male', dob: '2005-02-12', phone: '6385751370', address: { line1: 'Coimbatore', landmark: '', city: 'Coimbatore', state: 'Tamil Nadu', pincode: '641035', country: 'India' }, emergencyContact: { name: 'Bharath', phone: '9344443448', relation: 'Friend' }, bankDetails: { holderName: 'Raghav Krishna', accountNumber: '556102010008740', ifsc: 'UBIN0555614', bankName: 'Union Bank of India', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-015', name: 'Ritish Maheshwari', email: 'ritish@pocketfund.org', passcode: '713248', dept: "Founder's Office", role: 'employee', profileComplete: true, gender: 'Male', dob: '2006-09-24', phone: '9461752826', address: { line1: 'Building, Marine Lines', landmark: '', city: 'Mumbai', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Ritul Maheshwari', phone: '9462640924', relation: 'Sister' }, bankDetails: { holderName: 'Ritish Maheshwari', accountNumber: '1024949909', ifsc: 'IDFB0043471', bankName: 'IDFC First Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
   { id: 'EMP-016', name: 'Rizwan', email: 'rizwan@pocketfund.org', passcode: '256934', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-017', name: 'Sellers', email: 'sellers@pocketfund.org', passcode: '482617', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-018', name: 'Siddhant', email: 'siddhant@pocketfund.org', passcode: '591843', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
+  { id: 'EMP-018', name: 'Siddhant Mehta', email: 'siddhant@pocketfund.org', passcode: '591843', dept: 'Social Media', role: 'employee', profileComplete: true, gender: 'Male', dob: '2001-07-17', phone: '9819739881', address: { line1: '8, 28-A Ridge Road, Malabar Hill', landmark: '', city: 'Mumbai', state: 'Maharashtra', pincode: '400006', country: 'India' }, emergencyContact: { name: 'Sumeet Mehta', phone: '9821141142', relation: 'Father' }, bankDetails: { holderName: 'Siddhant Sumeet Mehta', accountNumber: '50100331477349', ifsc: 'HDFC0000625', bankName: 'HDFC Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
 ];
 
 const createInitialTickets = () => {
@@ -992,7 +990,7 @@ export default function PocketFundDashboard() {
         
         // Data version — bump this when adding new storage keys
         // IMPORTANT: This now does ADDITIVE migration only (no data wipe)
-        const DATA_VERSION = '8';
+        const DATA_VERSION = '9';
         let versionResult;
         try {
           versionResult = await storage.get('pocketfund-version');
@@ -1074,6 +1072,64 @@ export default function PocketFundDashboard() {
               await storage.set(key, key === 'pocketfund-employees' ? JSON.stringify(INITIAL_EMPLOYEES) : JSON.stringify([]));
             }
           }
+
+          // V9 migration: Smart employee merge — update profiles from INITIAL_EMPLOYEES
+          // while preserving user-modified data (leave balances, settings, profile photos, etc.)
+          // Also removes employees no longer in INITIAL_EMPLOYEES (ex-employees).
+          try {
+            const storedEmpResult = await storage.get('pocketfund-employees');
+            if (storedEmpResult?.value) {
+              const storedEmps = JSON.parse(storedEmpResult.value);
+              const initialById = {};
+              INITIAL_EMPLOYEES.forEach(e => { initialById[e.id] = e; });
+
+              // Keep only employees that still exist in INITIAL_EMPLOYEES
+              const validIds = new Set(INITIAL_EMPLOYEES.map(e => e.id));
+              const removedIds = storedEmps.filter(e => !validIds.has(e.id)).map(e => e.id);
+
+              // Merge: for each valid employee, take stored data but fill in any new fields from INITIAL_EMPLOYEES
+              const mergedEmps = INITIAL_EMPLOYEES.map(initEmp => {
+                const stored = storedEmps.find(s => s.id === initEmp.id);
+                if (!stored) return initEmp; // brand new employee from INITIAL_EMPLOYEES
+                // Merge: stored data wins for existing fields, INITIAL_EMPLOYEES fills gaps
+                return {
+                  ...initEmp,       // base: new profile data (name, dept, gender, dob, phone, address, bank, emergency)
+                  ...stored,        // overlay: anything user already modified (settings, leaveBalance, profilePhoto, bio)
+                  // Ensure critical updated fields from INITIAL_EMPLOYEES always apply:
+                  name: initEmp.name,
+                  dept: initEmp.dept || stored.dept,
+                  // Fill profile fields only if stored doesn't have them yet
+                  gender: stored.gender || initEmp.gender,
+                  dob: stored.dob || initEmp.dob,
+                  phone: stored.phone || initEmp.phone,
+                  address: (stored.address && stored.address.line1) ? stored.address : (initEmp.address || stored.address),
+                  emergencyContact: (stored.emergencyContact && stored.emergencyContact.name) ? stored.emergencyContact : (initEmp.emergencyContact || stored.emergencyContact),
+                  bankDetails: (stored.bankDetails && stored.bankDetails.accountNumber) ? stored.bankDetails : (initEmp.bankDetails || stored.bankDetails),
+                  profileComplete: initEmp.profileComplete || stored.profileComplete,
+                };
+              });
+
+              await storage.set('pocketfund-employees', JSON.stringify(mergedEmps));
+
+              // Clean up data for removed employees (optional, keeps storage tidy)
+              if (removedIds.length > 0) {
+                const cleanupKeys = ['pocketfund-tickets', 'pocketfund-leaves', 'pocketfund-salary'];
+                for (const ck of cleanupKeys) {
+                  try {
+                    const ckResult = await storage.get(ck);
+                    if (ckResult?.value) {
+                      const arr = JSON.parse(ckResult.value);
+                      const cleaned = arr.filter(item => !removedIds.includes(item.employeeId) && !removedIds.includes(item.userId));
+                      await storage.set(ck, JSON.stringify(cleaned));
+                    }
+                  } catch (e) { /* skip cleanup errors */ }
+                }
+              }
+            }
+          } catch (e) {
+            console.error('V9 employee migration error:', e);
+          }
+
           await storage.set('pocketfund-version', DATA_VERSION);
         }
 
