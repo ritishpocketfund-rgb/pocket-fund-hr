@@ -1,7 +1,27 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { Bell, Search, Plus, Filter, Clock, AlertCircle, CheckCircle2, MessageSquare, Calendar, Users, TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Send, X, ChevronDown, LogOut, User, Settings, Paperclip, Eye, EyeOff, RefreshCw, Trash2, Edit3, Check, AlertTriangle, Home, FileText, BarChart3, UserCheck, Mail, Lock, Megaphone, BellRing, Pin, Archive, Volume2, VolumeX, Moon, Sun, Palette, Shield, ChevronRight, Star, Globe, Briefcase, Wallet, IndianRupee, CircleDot, Wifi, WifiOff, Sparkles, Bot, MessageCircle, Phone, MapPin, Building, CreditCard, Heart, Camera, ChevronLeft, Upload, Image, Coffee } from 'lucide-react';
-import { storage } from './lib/supabase';
+import {
+  supabase,
+  fetchEmployees as dbFetchEmployees,
+  upsertEmployee, deleteEmployee as dbDeleteEmployee,
+  fetchTickets as dbFetchTickets,
+  createTicket as dbCreateTicket, updateTicket as dbUpdateTicket, addTicketComment as dbAddTicketComment,
+  fetchLeaves as dbFetchLeaves,
+  createLeave as dbCreateLeave, updateLeave as dbUpdateLeave,
+  fetchActivities as dbFetchActivities, createActivity as dbCreateActivity,
+  fetchAnnouncements as dbFetchAnnouncements,
+  createAnnouncement as dbCreateAnnouncement, updateAnnouncement as dbUpdateAnnouncement, deleteAnnouncement as dbDeleteAnnouncement,
+  fetchNotifications as dbFetchNotifications,
+  createNotification as dbCreateNotification, updateNotification as dbUpdateNotification, bulkUpdateNotifications, clearAllNotifications,
+  fetchSalaryRecords as dbFetchSalaryRecords, upsertSalaryRecord,
+  fetchSuggestions as dbFetchSuggestions,
+  createSuggestion as dbCreateSuggestion, updateSuggestion as dbUpdateSuggestion, deleteSuggestion as dbDeleteSuggestion,
+  fetchReferrals as dbFetchReferrals,
+  createReferral as dbCreateReferral, updateReferral as dbUpdateReferral, deleteReferral as dbDeleteReferral,
+  fetchHolidaySelections as dbFetchHolidaySelections, replaceHolidaySelections,
+  getCurrentUser, setCurrentUser as dbSetCurrentUser, clearCurrentUser,
+} from './lib/supabase';
 
 // ============ UTILITY FUNCTIONS ============
 const generateId = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}`;
@@ -135,50 +155,7 @@ const SALARY_STATUS_CONFIG = {
   'On Hold':       { color: 'bg-orange-50 text-orange-600 border-orange-200', dot: 'bg-orange-400', label: 'Payment on hold — contact HR' },
 };
 
-// Pre-registered users with 6-digit passcodes
-const INITIAL_EMPLOYEES = [
-  { id: 'ADMIN-001', name: 'Pocket Fund Admin', email: 'hello@pocket-fund.com', passcode: '920537', dept: 'Management', role: 'admin', profileComplete: true, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-001', name: 'Aabhas Tandon', email: 'aabhas@pocketfund.org', passcode: '847291', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2005-02-09', phone: '9637134494', address: { line1: 'Pimple Saudagar', landmark: '', city: 'Pune', state: 'Maharashtra', pincode: '411027', country: 'India' }, emergencyContact: { name: 'Ashish Tandon', phone: '9892430665', relation: 'Father' }, bankDetails: { holderName: 'Aabhas Tandon', accountNumber: '50100111555295', ifsc: 'HDFC0002524', bankName: 'HDFC Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-002', name: 'Anmol Birla', email: 'anmol@pocketfund.org', passcode: '362518', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2005-08-18', phone: '9374979811', address: { line1: 'Chandapura - Anekal Road, Iggalur', landmark: '', city: 'Bengaluru', state: 'Karnataka', pincode: '', country: 'India' }, emergencyContact: { name: 'Deepak Birla', phone: '9327979811', relation: 'Father' }, bankDetails: { holderName: 'Anmol Birla', accountNumber: '2111395860', ifsc: 'KKBK0000877', bankName: 'Kotak Mahindra Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-003', name: 'Aryan Solanki', email: 'aryan.solanki@pocketfund.org', passcode: '591734', dept: 'Social Media', role: 'employee', profileComplete: true, gender: 'Male', dob: '2006-10-08', phone: '9324270645', address: { line1: 'Vasant Vihar, Hiranandani Meadows', landmark: '', city: 'Thane', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Nita Solanki', phone: '9892770198', relation: 'Mother' }, bankDetails: { holderName: 'Aryan Solanki', accountNumber: '0753104000132398', ifsc: 'IBKL0000753', bankName: 'IDBI Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-004', name: 'Darshana Yadav', email: 'darshana@pocketfund.org', passcode: '428163', dept: 'Private Equity', role: 'employee', profileComplete: true, gender: 'Female', dob: '2001-02-26', phone: '9131632066', address: { line1: 'Indra Chouk, L.I.G Colony', landmark: 'Behind M.I.G Thana', city: 'LIG Square', state: 'Madhya Pradesh', pincode: '', country: 'India' }, emergencyContact: { name: 'Vandana Yadav', phone: '9575758526', relation: 'Mother' }, bankDetails: { holderName: 'Darshana Yadav', accountNumber: '50100483495737', ifsc: 'HDFC0003886', bankName: 'HDFC Ltd.', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-005', name: 'Aum Thakarkar', email: 'aum@pocket-fund.com', passcode: '735926', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2004-03-29', phone: '9372589413', address: { line1: 'Sector 35G, Near Tata Memorial Hospital', landmark: '', city: 'Kharghar', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Dhananjay Thakarkar', phone: '9820232340', relation: 'Father' }, bankDetails: { holderName: 'Aum Thakarkar', accountNumber: '30040100012014', ifsc: 'BARB0KHARGA', bankName: 'Bank Of Baroda', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-006', name: 'Dev', email: 'dev@pocket-fund.com', passcode: '614852', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-007', name: 'Ganesh Jagtap', email: 'ganesh@pocketfund.org', passcode: '283947', dept: 'Tech', role: 'employee', profileComplete: true, gender: 'Male', dob: '2002-09-10', phone: '9403383305', address: { line1: 'Plot no 84, N2, CIDCO', landmark: '', city: 'Aurangabad', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Ratnaprabha Jagtap', phone: '9518553084', relation: 'Mother' }, bankDetails: { holderName: 'Ganesh Jagtap', accountNumber: '0246752008', ifsc: 'KKBK0001946', bankName: 'Kotak Mahindra Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-008', name: 'Harish Sreepathi', email: 'harish@pocketfund.org', passcode: '952361', dept: 'Finance', role: 'employee', profileComplete: true, gender: 'Male', dob: '2002-08-14', phone: '9346632900', address: { line1: 'Lake View Towers, Nalagandla', landmark: '', city: 'Hyderabad', state: 'Telangana', pincode: '', country: 'India' }, emergencyContact: { name: '', phone: '9346632900', relation: 'Brother' }, bankDetails: { holderName: 'Harish Sreepathi', accountNumber: '50100622605620', ifsc: 'HDFC0003781', bankName: 'HDFC Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-009', name: 'Kavya Sharma', email: 'kavya@pocketfund.org', passcode: '174639', dept: 'Finance', role: 'employee', profileComplete: true, gender: 'Female', dob: '2003-03-07', phone: '7303286464', address: { line1: 'Jasola Vihar, Pocket 12', landmark: '', city: 'New Delhi', state: 'Delhi', pincode: '110025', country: 'India' }, emergencyContact: { name: 'Kartikeya', phone: '8851470544', relation: 'Brother' }, bankDetails: { holderName: 'Kavya Sharma', accountNumber: '50100674455491', ifsc: 'HDFC0000271', bankName: 'HDFC', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-010', name: 'Manas Kogta', email: 'manas@pocketfund.org', passcode: '839274', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2002-05-27', phone: '9604994499', address: { line1: 'Charni Road', landmark: '', city: 'Mumbai', state: 'Maharashtra', pincode: '400004', country: 'India' }, emergencyContact: { name: 'Rajesh Kogta', phone: '9423141750', relation: 'Father' }, bankDetails: { holderName: 'Manas Kogta', accountNumber: '39746680636', ifsc: 'SBIN0005935', bankName: 'SBI', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-011', name: 'Neil', email: 'neil@pocketfund.org', passcode: '461582', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-012', name: 'Pushkar Rathod', email: 'pushkar@pocketfund.org', passcode: '527193', dept: 'Business Analyst', role: 'employee', profileComplete: true, gender: 'Male', dob: '2005-07-12', phone: '7249412705', address: { line1: 'Fitwala Road, Near Elphinstone Bridge, Prabhadevi', landmark: '', city: 'Mumbai', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Kalpesh', phone: '8149477749', relation: 'Father' }, bankDetails: { holderName: 'Pushkar Rathod', accountNumber: '41433499749', ifsc: 'SBIN0000437', bankName: 'State Bank Of India', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-013', name: 'Raghav Krishna', email: 'raghav@pocketfund.org', passcode: '698415', dept: 'Tech', role: 'employee', profileComplete: true, gender: 'Male', dob: '2005-02-12', phone: '6385751370', address: { line1: 'Coimbatore', landmark: '', city: 'Coimbatore', state: 'Tamil Nadu', pincode: '641035', country: 'India' }, emergencyContact: { name: 'Bharath', phone: '9344443448', relation: 'Friend' }, bankDetails: { holderName: 'Raghav Krishna', accountNumber: '556102010008740', ifsc: 'UBIN0555614', bankName: 'Union Bank of India', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-015', name: 'Ritish Maheshwari', email: 'ritish@pocketfund.org', passcode: '713248', dept: "Founder's Office", role: 'employee', profileComplete: true, gender: 'Male', dob: '2006-09-24', phone: '9461752826', address: { line1: 'Building, Marine Lines', landmark: '', city: 'Mumbai', state: 'Maharashtra', pincode: '', country: 'India' }, emergencyContact: { name: 'Ritul Maheshwari', phone: '9462640924', relation: 'Sister' }, bankDetails: { holderName: 'Ritish Maheshwari', accountNumber: '1024949909', ifsc: 'IDFB0043471', bankName: 'IDFC First Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-016', name: 'Rizwan', email: 'rizwan@pocketfund.org', passcode: '256934', dept: '', role: 'employee', profileComplete: false, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-  { id: 'EMP-018', name: 'Siddhant Mehta', email: 'siddhant@pocketfund.org', passcode: '591843', dept: 'Social Media', role: 'employee', profileComplete: true, gender: 'Male', dob: '2001-07-17', phone: '9819739881', address: { line1: '8, 28-A Ridge Road, Malabar Hill', landmark: '', city: 'Mumbai', state: 'Maharashtra', pincode: '400006', country: 'India' }, emergencyContact: { name: 'Sumeet Mehta', phone: '9821141142', relation: 'Father' }, bankDetails: { holderName: 'Siddhant Sumeet Mehta', accountNumber: '50100331477349', ifsc: 'HDFC0000625', bankName: 'HDFC Bank', upiId: '' }, leaveBalance: { personal: 1, sick: 1, exam: 0, unpaid: 0, emergency: 0 }, settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' } },
-];
-
-const createInitialTickets = () => {
-  return [];
-};
-
-const createInitialLeaves = () => {
-  return [];
-};
-
-const createInitialActivities = () => {
-  return [];
-};
-
-const createInitialAnnouncements = () => {
-  return [];
-};
-
-const createInitialNotifications = () => {
-  return [];
-};
-
-const createInitialSalaryRecords = () => {
-  return [];
-};
+// Employee data is now stored in Supabase tables (see seed.sql)
 
 // Helper: get month string like "January 2026"
 const getMonthString = (date = new Date()) => {
@@ -980,315 +957,36 @@ export default function PocketFundDashboard() {
   const [showCalendarPopup, setShowCalendarPopup] = useState(false);
   const [viewingEmployee, setViewingEmployee] = useState(null);
 
-  // Load data from storage
+  // Load data from Supabase tables
   useEffect(() => {
     const loadData = async () => {
       try {
-        // FORCE FRESH START - Clear all old data and start clean
-        // Set to true ONLY when you intentionally want to wipe everything
-        const forceReset = false;
-        
-        // Data version — bump this when adding new storage keys
-        // IMPORTANT: This now does ADDITIVE migration only (no data wipe)
-        const DATA_VERSION = '9';
-        let versionResult;
-        try {
-          versionResult = await storage.get('pocketfund-version');
-        } catch (e) {
-          versionResult = null;
-        }
-        
-        const isFirstLoad = !versionResult?.value;
-        const needsMigration = versionResult?.value && versionResult.value !== DATA_VERSION;
-        
-        if (forceReset) {
-          // Only runs if you explicitly set forceReset = true
-          await storage.set('pocketfund-employees', JSON.stringify(INITIAL_EMPLOYEES));
-          await storage.set('pocketfund-tickets', JSON.stringify([]));
-          await storage.set('pocketfund-leaves', JSON.stringify([]));
-          await storage.set('pocketfund-activities', JSON.stringify([]));
-          await storage.set('pocketfund-announcements', JSON.stringify([]));
-          await storage.set('pocketfund-notifications', JSON.stringify([]));
-          await storage.set('pocketfund-salary', JSON.stringify([]));
-          await storage.set('pocketfund-suggestions', JSON.stringify([]));
-          await storage.set('pocketfund-holidays', JSON.stringify([]));
-          await storage.set('pocketfund-version', DATA_VERSION);
-          try { await storage.delete('pocketfund-currentuser'); } catch(e) {}
-          
-          setEmployees(INITIAL_EMPLOYEES);
-          setTickets([]);
-          setLeaves([]);
-          setActivities([]);
-          setAnnouncements([]);
-          setNotifications([]);
-          setSalaryRecords([]);
-          setSuggestions([]);
-          setHolidaySelections([]);
-          setIsLoading(false);
-          return;
-        }
+        const [emps, tkts, lvs, acts, anns, ntfs, sals, sugs, refs, hols] = await Promise.all([
+          dbFetchEmployees(),
+          dbFetchTickets(),
+          dbFetchLeaves(),
+          dbFetchActivities(),
+          dbFetchAnnouncements(),
+          dbFetchNotifications(),
+          dbFetchSalaryRecords(),
+          dbFetchSuggestions(),
+          dbFetchReferrals(),
+          dbFetchHolidaySelections(),
+        ]);
+        setEmployees(emps);
+        setTickets(tkts);
+        setLeaves(lvs);
+        setActivities(acts);
+        setAnnouncements(anns);
+        setNotifications(ntfs);
+        setSalaryRecords(sals);
+        setSuggestions(sugs);
+        setReferrals(refs);
+        setHolidaySelections(hols);
 
-        if (isFirstLoad) {
-          // First time ever — initialize all storage keys
-          await storage.set('pocketfund-employees', JSON.stringify(INITIAL_EMPLOYEES));
-          await storage.set('pocketfund-tickets', JSON.stringify([]));
-          await storage.set('pocketfund-leaves', JSON.stringify([]));
-          await storage.set('pocketfund-activities', JSON.stringify([]));
-          await storage.set('pocketfund-announcements', JSON.stringify([]));
-          await storage.set('pocketfund-notifications', JSON.stringify([]));
-          await storage.set('pocketfund-salary', JSON.stringify([]));
-          await storage.set('pocketfund-suggestions', JSON.stringify([]));
-          await storage.set('pocketfund-holidays', JSON.stringify([]));
-          await storage.set('pocketfund-version', DATA_VERSION);
-          
-          setEmployees(INITIAL_EMPLOYEES);
-          setTickets([]);
-          setLeaves([]);
-          setActivities([]);
-          setAnnouncements([]);
-          setNotifications([]);
-          setSalaryRecords([]);
-          setSuggestions([]);
-          setHolidaySelections([]);
-          setIsLoading(false);
-          return;
-        }
-
-        if (needsMigration) {
-          // Additive migration — only initialize NEW keys that don't exist yet
-          // This preserves all existing data (leaves, profiles, tickets, etc.)
-          const keysToEnsure = [
-            'pocketfund-employees', 'pocketfund-tickets', 'pocketfund-leaves',
-            'pocketfund-activities', 'pocketfund-announcements', 'pocketfund-notifications',
-            'pocketfund-salary', 'pocketfund-suggestions', 'pocketfund-holidays',
-          ];
-          for (const key of keysToEnsure) {
-            try {
-              const existing = await storage.get(key);
-              if (!existing?.value) {
-                await storage.set(key, key === 'pocketfund-employees' ? JSON.stringify(INITIAL_EMPLOYEES) : JSON.stringify([]));
-              }
-            } catch (e) {
-              await storage.set(key, key === 'pocketfund-employees' ? JSON.stringify(INITIAL_EMPLOYEES) : JSON.stringify([]));
-            }
-          }
-
-          // V9 migration: Smart employee merge — update profiles from INITIAL_EMPLOYEES
-          // while preserving user-modified data (leave balances, settings, profile photos, etc.)
-          // Also removes employees no longer in INITIAL_EMPLOYEES (ex-employees).
-          try {
-            const storedEmpResult = await storage.get('pocketfund-employees');
-            if (storedEmpResult?.value) {
-              const storedEmps = JSON.parse(storedEmpResult.value);
-              const initialById = {};
-              INITIAL_EMPLOYEES.forEach(e => { initialById[e.id] = e; });
-
-              // Keep only employees that still exist in INITIAL_EMPLOYEES
-              const validIds = new Set(INITIAL_EMPLOYEES.map(e => e.id));
-              const removedIds = storedEmps.filter(e => !validIds.has(e.id)).map(e => e.id);
-
-              // Merge: for each valid employee, take stored data but fill in any new fields from INITIAL_EMPLOYEES
-              const mergedEmps = INITIAL_EMPLOYEES.map(initEmp => {
-                const stored = storedEmps.find(s => s.id === initEmp.id);
-                if (!stored) return initEmp; // brand new employee from INITIAL_EMPLOYEES
-                // Merge: stored data wins for existing fields, INITIAL_EMPLOYEES fills gaps
-                return {
-                  ...initEmp,       // base: new profile data (name, dept, gender, dob, phone, address, bank, emergency)
-                  ...stored,        // overlay: anything user already modified (settings, leaveBalance, profilePhoto, bio)
-                  // Ensure critical updated fields from INITIAL_EMPLOYEES always apply:
-                  name: initEmp.name,
-                  dept: initEmp.dept || stored.dept,
-                  // Fill profile fields only if stored doesn't have them yet
-                  gender: stored.gender || initEmp.gender,
-                  dob: stored.dob || initEmp.dob,
-                  phone: stored.phone || initEmp.phone,
-                  address: (stored.address && stored.address.line1) ? stored.address : (initEmp.address || stored.address),
-                  emergencyContact: (stored.emergencyContact && stored.emergencyContact.name) ? stored.emergencyContact : (initEmp.emergencyContact || stored.emergencyContact),
-                  bankDetails: (stored.bankDetails && stored.bankDetails.accountNumber) ? stored.bankDetails : (initEmp.bankDetails || stored.bankDetails),
-                  profileComplete: initEmp.profileComplete || stored.profileComplete,
-                };
-              });
-
-              await storage.set('pocketfund-employees', JSON.stringify(mergedEmps));
-
-              // Clean up data for removed employees (optional, keeps storage tidy)
-              if (removedIds.length > 0) {
-                const cleanupKeys = ['pocketfund-tickets', 'pocketfund-leaves', 'pocketfund-salary'];
-                for (const ck of cleanupKeys) {
-                  try {
-                    const ckResult = await storage.get(ck);
-                    if (ckResult?.value) {
-                      const arr = JSON.parse(ckResult.value);
-                      const cleaned = arr.filter(item => !removedIds.includes(item.employeeId) && !removedIds.includes(item.userId));
-                      await storage.set(ck, JSON.stringify(cleaned));
-                    }
-                  } catch (e) { /* skip cleanup errors */ }
-                }
-              }
-            }
-          } catch (e) {
-            console.error('V9 employee migration error:', e);
-          }
-
-          await storage.set('pocketfund-version', DATA_VERSION);
-        }
-
-        // Load employees/users
-        let employeesResult;
-        try {
-          employeesResult = await storage.get('pocketfund-employees');
-        } catch (e) {
-          employeesResult = null;
-        }
-        if (employeesResult?.value) {
-          setEmployees(JSON.parse(employeesResult.value));
-        } else {
-          setEmployees(INITIAL_EMPLOYEES);
-          await storage.set('pocketfund-employees', JSON.stringify(INITIAL_EMPLOYEES));
-        }
-
-        // Load tickets
-        let ticketsResult;
-        try {
-          ticketsResult = await storage.get('pocketfund-tickets');
-        } catch (e) {
-          ticketsResult = null;
-        }
-        if (ticketsResult?.value) {
-          setTickets(JSON.parse(ticketsResult.value));
-        } else {
-          const initialTickets = createInitialTickets();
-          setTickets(initialTickets);
-          await storage.set('pocketfund-tickets', JSON.stringify(initialTickets));
-        }
-
-        // Load leaves
-        let leavesResult;
-        try {
-          leavesResult = await storage.get('pocketfund-leaves');
-        } catch (e) {
-          leavesResult = null;
-        }
-        if (leavesResult?.value) {
-          setLeaves(JSON.parse(leavesResult.value));
-        } else {
-          const initialLeaves = createInitialLeaves();
-          setLeaves(initialLeaves);
-          await storage.set('pocketfund-leaves', JSON.stringify(initialLeaves));
-        }
-
-        // Load activities
-        let activitiesResult;
-        try {
-          activitiesResult = await storage.get('pocketfund-activities');
-        } catch (e) {
-          activitiesResult = null;
-        }
-        if (activitiesResult?.value) {
-          setActivities(JSON.parse(activitiesResult.value));
-        } else {
-          const initialActivities = createInitialActivities();
-          setActivities(initialActivities);
-          await storage.set('pocketfund-activities', JSON.stringify(initialActivities));
-        }
-
-        // Load announcements
-        let announcementsResult;
-        try {
-          announcementsResult = await storage.get('pocketfund-announcements');
-        } catch (e) {
-          announcementsResult = null;
-        }
-        if (announcementsResult?.value) {
-          setAnnouncements(JSON.parse(announcementsResult.value));
-        } else {
-          const initialAnnouncements = createInitialAnnouncements();
-          setAnnouncements(initialAnnouncements);
-          await storage.set('pocketfund-announcements', JSON.stringify(initialAnnouncements));
-        }
-
-        // Load notifications
-        let notificationsResult;
-        try {
-          notificationsResult = await storage.get('pocketfund-notifications');
-        } catch (e) {
-          notificationsResult = null;
-        }
-        if (notificationsResult?.value) {
-          setNotifications(JSON.parse(notificationsResult.value));
-        } else {
-          const initialNotifications = createInitialNotifications();
-          setNotifications(initialNotifications);
-          await storage.set('pocketfund-notifications', JSON.stringify(initialNotifications));
-        }
-
-        // Load salary records
-        let salaryResult;
-        try {
-          salaryResult = await storage.get('pocketfund-salary');
-        } catch (e) {
-          salaryResult = null;
-        }
-        if (salaryResult?.value) {
-          setSalaryRecords(JSON.parse(salaryResult.value));
-        } else {
-          const initialSalary = createInitialSalaryRecords();
-          setSalaryRecords(initialSalary);
-          await storage.set('pocketfund-salary', JSON.stringify(initialSalary));
-        }
-
-        // Load suggestions
-        let suggestionsResult;
-        try {
-          suggestionsResult = await storage.get('pocketfund-suggestions');
-        } catch (e) {
-          suggestionsResult = null;
-        }
-        if (suggestionsResult?.value) {
-          setSuggestions(JSON.parse(suggestionsResult.value));
-        } else {
-          setSuggestions([]);
-          await storage.set('pocketfund-suggestions', JSON.stringify([]));
-        }
-
-        // Load referrals
-        let referralsResult;
-        try {
-          referralsResult = await storage.get('pocketfund-referrals');
-        } catch (e) {
-          referralsResult = null;
-        }
-        if (referralsResult?.value) {
-          setReferrals(JSON.parse(referralsResult.value));
-        } else {
-          setReferrals([]);
-          await storage.set('pocketfund-referrals', JSON.stringify([]));
-        }
-
-        // Load holiday selections
-        let holidaysResult;
-        try {
-          holidaysResult = await storage.get('pocketfund-holidays');
-        } catch (e) {
-          holidaysResult = null;
-        }
-        if (holidaysResult?.value) {
-          setHolidaySelections(JSON.parse(holidaysResult.value));
-        } else {
-          setHolidaySelections([]);
-          await storage.set('pocketfund-holidays', JSON.stringify([]));
-        }
-
-        // Load current user preference
-        let userResult;
-        try {
-          userResult = await storage.get('pocketfund-currentuser');
-        } catch (e) {
-          userResult = null;
-        }
-        if (userResult?.value) {
-          setCurrentUser(JSON.parse(userResult.value));
-        }
+        // Restore session from localStorage
+        const savedUser = getCurrentUser();
+        if (savedUser) setCurrentUser(savedUser);
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -1302,28 +1000,28 @@ export default function PocketFundDashboard() {
   const refreshData = useCallback(async (silent = true) => {
     if (!silent) setIsSyncing(true);
     try {
-      const [empR, tktR, lvR, actR, annR, ntfR, salR, sugR, refR, holR] = await Promise.all([
-        storage.get('pocketfund-employees'),
-        storage.get('pocketfund-tickets'),
-        storage.get('pocketfund-leaves'),
-        storage.get('pocketfund-activities'),
-        storage.get('pocketfund-announcements'),
-        storage.get('pocketfund-notifications'),
-        storage.get('pocketfund-salary'),
-        storage.get('pocketfund-suggestions'),
-        storage.get('pocketfund-referrals').catch(() => null),
-        storage.get('pocketfund-holidays').catch(() => null),
+      const [emps, tkts, lvs, acts, anns, ntfs, sals, sugs, refs, hols] = await Promise.all([
+        dbFetchEmployees(),
+        dbFetchTickets(),
+        dbFetchLeaves(),
+        dbFetchActivities(),
+        dbFetchAnnouncements(),
+        dbFetchNotifications(),
+        dbFetchSalaryRecords(),
+        dbFetchSuggestions(),
+        dbFetchReferrals(),
+        dbFetchHolidaySelections(),
       ]);
-      if (empR?.value) setEmployees(JSON.parse(empR.value));
-      if (tktR?.value) setTickets(JSON.parse(tktR.value));
-      if (lvR?.value) setLeaves(JSON.parse(lvR.value));
-      if (actR?.value) setActivities(JSON.parse(actR.value));
-      if (annR?.value) setAnnouncements(JSON.parse(annR.value));
-      if (ntfR?.value) setNotifications(JSON.parse(ntfR.value));
-      if (salR?.value) setSalaryRecords(JSON.parse(salR.value));
-      if (sugR?.value) setSuggestions(JSON.parse(sugR.value));
-      if (refR?.value) setReferrals(JSON.parse(refR.value));
-      if (holR?.value) setHolidaySelections(JSON.parse(holR.value));
+      setEmployees(emps);
+      setTickets(tkts);
+      setLeaves(lvs);
+      setActivities(acts);
+      setAnnouncements(anns);
+      setNotifications(ntfs);
+      setSalaryRecords(sals);
+      setSuggestions(sugs);
+      setReferrals(refs);
+      setHolidaySelections(hols);
       setLastSynced(new Date());
     } catch (e) {
       console.error('Sync failed:', e);
@@ -1340,23 +1038,23 @@ export default function PocketFundDashboard() {
   // Save employees to storage
   const saveEmployees = async (newEmployees) => {
     setEmployees(newEmployees);
-    await storage.set('pocketfund-employees', JSON.stringify(newEmployees));
+    // Upsert all employees to Supabase (handles both new and updated)
+    for (const emp of newEmployees) await upsertEmployee(emp);
   };
 
   // Save data to storage
   const saveTickets = async (newTickets) => {
     setTickets(newTickets);
-    await storage.set('pocketfund-tickets', JSON.stringify(newTickets));
+    // Note: individual ticket operations now go through db* functions directly
   };
 
   const saveLeaves = async (newLeaves) => {
     setLeaves(newLeaves);
-    await storage.set('pocketfund-leaves', JSON.stringify(newLeaves));
+    // Note: individual leave operations now go through db* functions directly
   };
 
   const saveActivities = async (newActivities) => {
     setActivities(newActivities);
-    await storage.set('pocketfund-activities', JSON.stringify(newActivities));
   };
 
   const addActivity = async (activity) => {
@@ -1368,56 +1066,60 @@ export default function PocketFundDashboard() {
   // Save announcements
   const saveAnnouncements = async (newAnnouncements) => {
     setAnnouncements(newAnnouncements);
-    await storage.set('pocketfund-announcements', JSON.stringify(newAnnouncements));
+    // Note: individual announcement operations now go through db* functions directly
   };
 
   // Save notifications
   const saveNotifications = async (newNotifications) => {
     setNotifications(newNotifications);
-    await storage.set('pocketfund-notifications', JSON.stringify(newNotifications));
+    // Note: individual notification operations now go through db* functions directly
   };
 
   // Save salary records
   const saveSalaryRecords = async (newRecords) => {
     setSalaryRecords(newRecords);
-    await storage.set('pocketfund-salary', JSON.stringify(newRecords));
+    // Note: individual salary operations now go through upsertSalaryRecord directly
   };
 
   // Save suggestions
   const saveSuggestions = async (newSuggestions) => {
     setSuggestions(newSuggestions);
-    await storage.set('pocketfund-suggestions', JSON.stringify(newSuggestions));
+    // Note: individual suggestion operations now go through db* functions directly
   };
 
   // Save referrals
   const saveReferrals = async (newReferrals) => {
     setReferrals(newReferrals);
-    await storage.set('pocketfund-referrals', JSON.stringify(newReferrals));
+    // Note: individual referral operations now go through db* functions directly
   };
 
   // Save holiday selections
   const saveHolidaySelections = async (newSelections) => {
     setHolidaySelections(newSelections);
-    await storage.set('pocketfund-holidays', JSON.stringify(newSelections));
+    await replaceHolidaySelections(newSelections);
   };
 
   // Add notification helper
   const addNotification = async (notif) => {
     const newNotif = { id: generateId('NTF'), ...notif, read: false, at: Date.now() };
     const newNotifications = [newNotif, ...notifications].slice(0, 100);
-    await saveNotifications(newNotifications);
+    setNotifications(newNotifications);
+    await dbCreateNotification(newNotif);
   };
 
   // Mark notification as read
   const markNotificationRead = async (notifId) => {
     const updated = notifications.map(n => n.id === notifId ? { ...n, read: true } : n);
-    await saveNotifications(updated);
+    setNotifications(updated);
+    await dbUpdateNotification(notifId, { read: true });
   };
 
   // Mark all notifications as read
   const markAllNotificationsRead = async () => {
     const updated = notifications.map(n => ({ ...n, read: true }));
-    await saveNotifications(updated);
+    setNotifications(updated);
+    const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+    if (unreadIds.length > 0) await bulkUpdateNotifications(unreadIds, { read: true });
   };
 
   // Clear all notifications
@@ -1440,7 +1142,7 @@ export default function PocketFundDashboard() {
     const userWithoutPasscode = { ...user };
     delete userWithoutPasscode.passcode;
     setCurrentUser(userWithoutPasscode);
-    await storage.set('pocketfund-currentuser', JSON.stringify(userWithoutPasscode));
+    dbSetCurrentUser(userWithoutPasscode);
     showToast(`Welcome back, ${user.name}!`);
   };
 
@@ -1448,12 +1150,12 @@ export default function PocketFundDashboard() {
   const handleCompleteProfile = async (profileData) => {
     const updatedUser = { ...currentUser, ...profileData, profileComplete: true };
     setCurrentUser(updatedUser);
-    await storage.set('pocketfund-currentuser', JSON.stringify(updatedUser));
+    dbSetCurrentUser(updatedUser);
     
-    const newEmployees = employees.map(e => 
-      e.id === updatedUser.id ? { ...e, ...profileData, profileComplete: true } : e
-    );
-    await saveEmployees(newEmployees);
+    const updatedEmp = { ...employees.find(e => e.id === updatedUser.id), ...profileData, profileComplete: true };
+    await upsertEmployee(updatedEmp);
+    const newEmployees = employees.map(e => e.id === updatedUser.id ? updatedEmp : e);
+    setEmployees(newEmployees);
     showToast(`Profile set up! Welcome, ${updatedUser.name}!`);
   };
 
@@ -1461,19 +1163,19 @@ export default function PocketFundDashboard() {
   const handleSkipProfile = async () => {
     const updatedUser = { ...currentUser, profileComplete: true };
     setCurrentUser(updatedUser);
-    await storage.set('pocketfund-currentuser', JSON.stringify(updatedUser));
+    dbSetCurrentUser(updatedUser);
     
-    const newEmployees = employees.map(e => 
-      e.id === updatedUser.id ? { ...e, profileComplete: true } : e
-    );
-    await saveEmployees(newEmployees);
+    const updatedEmp = { ...employees.find(e => e.id === updatedUser.id), profileComplete: true };
+    await upsertEmployee(updatedEmp);
+    const newEmployees = employees.map(e => e.id === updatedUser.id ? updatedEmp : e);
+    setEmployees(newEmployees);
     showToast(`Welcome, ${updatedUser.name}! You can complete your profile later in Settings.`);
   };
 
   // Logout handler
   const handleLogout = async () => {
     setCurrentUser(null);
-    await storage.delete('pocketfund-currentuser');
+    clearCurrentUser();
     setActiveTab('dashboard');
   };
 
@@ -1492,7 +1194,8 @@ export default function PocketFundDashboard() {
       internalNotes: [],
     };
     const newTickets = [newTicket, ...tickets];
-    await saveTickets(newTickets);
+    setTickets(newTickets);
+    await dbCreateTicket(newTicket);
     await addActivity({ type: 'ticket_created', ticketId: newTicket.id, by: currentUser.id });
     // Notify only the creator and admins (tickets are confidential)
     const adminIdsForTicket = employees.filter(e => e.role === 'admin').map(e => e.id);
@@ -1513,7 +1216,8 @@ export default function PocketFundDashboard() {
       }
       return t;
     });
-    await saveTickets(newTickets);
+    setTickets(newTickets);
+    await dbUpdateTicket(ticketId, { ...updates, updatedAt: Date.now() });
     
     if (updates.status) {
       await addActivity({ type: 'status_changed', ticketId, by: currentUser.id, newStatus: updates.status });
@@ -1544,18 +1248,21 @@ export default function PocketFundDashboard() {
 
   // Add comment to ticket
   const handleAddComment = async (ticketId, text, isInternal = false) => {
+    const now = Date.now();
+    const newItem = { by: currentUser.id, text, at: now };
     const newTickets = tickets.map(t => {
       if (t.id === ticketId) {
-        const newItem = { by: currentUser.id, text, at: Date.now() };
         return {
           ...t,
           [isInternal ? 'internalNotes' : 'comments']: [...(t[isInternal ? 'internalNotes' : 'comments'] || []), newItem],
-          updatedAt: Date.now(),
+          updatedAt: now,
         };
       }
       return t;
     });
-    await saveTickets(newTickets);
+    setTickets(newTickets);
+    await dbAddTicketComment(ticketId, currentUser.id, text, isInternal, now);
+    await dbUpdateTicket(ticketId, { updatedAt: now });
     await addActivity({ type: isInternal ? 'note_added' : 'comment_added', ticketId, by: currentUser.id });
     setSelectedTicket(newTickets.find(t => t.id === ticketId));
     showToast(isInternal ? 'Note added!' : 'Comment added!');
@@ -1564,7 +1271,8 @@ export default function PocketFundDashboard() {
   // Rate ticket
   const handleRateTicket = async (ticketId, rating) => {
     const newTickets = tickets.map(t => t.id === ticketId ? { ...t, rating } : t);
-    await saveTickets(newTickets);
+    setTickets(newTickets);
+    await dbUpdateTicket(ticketId, { rating });
     setSelectedTicket(newTickets.find(t => t.id === ticketId));
     showToast('Thank you for your feedback!');
   };
@@ -1585,7 +1293,8 @@ export default function PocketFundDashboard() {
       approvedBy: null,
     };
     const newLeaves = [newLeave, ...leaves];
-    await saveLeaves(newLeaves);
+    setLeaves(newLeaves);
+    await dbCreateLeave(newLeave);
     await addActivity({ type: 'leave_requested', leaveId: newLeave.id, by: currentUser.id });
     // Notify only admins and the requesting employee (not all employees)
     const adminIds = employees.filter(e => e.role === 'admin').map(e => e.id);
@@ -1607,7 +1316,12 @@ export default function PocketFundDashboard() {
       }
       return l;
     });
-    await saveLeaves(newLeaves);
+    setLeaves(newLeaves);
+    await dbUpdateLeave(leaveId, {
+      status: action === 'approve' ? 'Approved' : 'Rejected',
+      approvedBy: currentUser.id,
+      updatedAt: Date.now(),
+    });
     await addActivity({ type: action === 'approve' ? 'leave_approved' : 'leave_rejected', leaveId, by: currentUser.id });
     const leave = leaves.find(l => l.id === leaveId);
     if (leave) {
@@ -1627,7 +1341,8 @@ export default function PocketFundDashboard() {
       archived: false,
     };
     const newAnnouncements = [newAnnouncement, ...announcements];
-    await saveAnnouncements(newAnnouncements);
+    setAnnouncements(newAnnouncements);
+    await dbCreateAnnouncement(newAnnouncement);
     await addActivity({ type: 'announcement_created', announcementId: newAnnouncement.id, by: currentUser.id });
     await addNotification({ type: 'announcement', title: 'New Announcement', message: announcementData.title, forUser: 'all', relatedId: newAnnouncement.id });
     setShowNewAnnouncementModal(false);
@@ -1636,22 +1351,26 @@ export default function PocketFundDashboard() {
 
   // Pin/unpin announcement
   const handleTogglePinAnnouncement = async (announcementId) => {
+    const ann = announcements.find(a => a.id === announcementId);
     const updated = announcements.map(a => a.id === announcementId ? { ...a, pinned: !a.pinned } : a);
-    await saveAnnouncements(updated);
+    setAnnouncements(updated);
+    await dbUpdateAnnouncement(announcementId, { pinned: !ann.pinned });
     showToast('Announcement updated!');
   };
 
   // Archive announcement
   const handleArchiveAnnouncement = async (announcementId) => {
     const updated = announcements.map(a => a.id === announcementId ? { ...a, archived: true } : a);
-    await saveAnnouncements(updated);
+    setAnnouncements(updated);
+    await dbUpdateAnnouncement(announcementId, { archived: true });
     showToast('Announcement archived!');
   };
 
   // Delete announcement
   const handleDeleteAnnouncement = async (announcementId) => {
     const updated = announcements.filter(a => a.id !== announcementId);
-    await saveAnnouncements(updated);
+    setAnnouncements(updated);
+    await dbDeleteAnnouncement(announcementId);
     showToast('Announcement deleted!');
   };
 
@@ -1659,11 +1378,10 @@ export default function PocketFundDashboard() {
   const handleUpdateSettings = async (newSettings) => {
     const updatedUser = { ...currentUser, settings: { ...currentUser.settings, ...newSettings } };
     setCurrentUser(updatedUser);
-    await storage.set('pocketfund-currentuser', JSON.stringify(updatedUser));
-    const newEmployees = employees.map(e => 
-      e.id === updatedUser.id ? { ...e, settings: updatedUser.settings } : e
-    );
-    await saveEmployees(newEmployees);
+    dbSetCurrentUser(updatedUser);
+    const updatedEmp = { ...employees.find(e => e.id === updatedUser.id), settings: updatedUser.settings };
+    await upsertEmployee(updatedEmp);
+    setEmployees(employees.map(e => e.id === updatedUser.id ? updatedEmp : e));
     showToast('Settings saved!');
   };
 
@@ -1671,11 +1389,10 @@ export default function PocketFundDashboard() {
   const handleUpdateProfile = async (profileData) => {
     const updatedUser = { ...currentUser, ...profileData };
     setCurrentUser(updatedUser);
-    await storage.set('pocketfund-currentuser', JSON.stringify(updatedUser));
-    const newEmployees = employees.map(e => 
-      e.id === updatedUser.id ? { ...e, ...profileData } : e
-    );
-    await saveEmployees(newEmployees);
+    dbSetCurrentUser(updatedUser);
+    const updatedEmp = { ...employees.find(e => e.id === updatedUser.id), ...profileData };
+    await upsertEmployee(updatedEmp);
+    setEmployees(employees.map(e => e.id === updatedUser.id ? updatedEmp : e));
     showToast('Profile updated!');
   };
 
@@ -1694,7 +1411,8 @@ export default function PocketFundDashboard() {
       settings: { theme: 'light', notifications: { tickets: true, leaves: true, announcements: true, comments: true }, bio: '' },
     };
     const newEmployees = [...employees, newEmployee];
-    await saveEmployees(newEmployees);
+    setEmployees(newEmployees);
+    await upsertEmployee(newEmployee);
     await addActivity({ type: 'member_added', by: currentUser.id, memberId: newId });
     // Only notify admins about new team members
     const adminIdsForNotif = employees.filter(e => e.role === 'admin').map(e => e.id);
@@ -1709,12 +1427,12 @@ export default function PocketFundDashboard() {
     if (!emp) return;
     if (!confirm(`Are you sure you want to remove ${emp.name}? This will revoke their access permanently.`)) return;
     const newEmployees = employees.filter(e => e.id !== employeeId);
-    await saveEmployees(newEmployees);
-    // Clean up related data
+    setEmployees(newEmployees);
+    await dbDeleteEmployee(employeeId); // CASCADE deletes tickets, leaves, etc.
     const newTickets = tickets.filter(t => t.employeeId !== employeeId);
-    await saveTickets(newTickets);
+    setTickets(newTickets);
     const newLeaves = leaves.filter(l => l.employeeId !== employeeId);
-    await saveLeaves(newLeaves);
+    setLeaves(newLeaves);
     await addActivity({ type: 'member_removed', by: currentUser.id, memberName: emp.name });
     showToast(`${emp.name} has been removed`);
   };
@@ -1754,7 +1472,12 @@ export default function PocketFundDashboard() {
       });
     }
 
-    await saveSalaryRecords(updatedRecords);
+    setSalaryRecords(updatedRecords);
+    // Upsert each salary record to Supabase
+    for (const empId of employeeIds) {
+      const rec = updatedRecords.find(r => r.userId === empId && r.month === month);
+      if (rec) await upsertSalaryRecord(rec);
+    }
     await addActivity({ type: 'salary_updated', by: currentUser.id, count: employeeIds.length });
     showToast(`Salary status updated for ${employeeIds.length} employee${employeeIds.length > 1 ? 's' : ''}!`);
   };
@@ -1778,7 +1501,8 @@ export default function PocketFundDashboard() {
       // NOTE: No employeeId, no name, no dept — fully anonymous
     };
     const newSuggestions = [newSuggestion, ...suggestions];
-    await saveSuggestions(newSuggestions);
+    setSuggestions(newSuggestions);
+    await dbCreateSuggestion(newSuggestion);
     await addActivity({ type: 'suggestion_created', by: 'anonymous' });
     // Only notify admins about new suggestions
     const adminIdsForSuggestion = employees.filter(e => e.role === 'admin').map(e => e.id);
@@ -1795,7 +1519,8 @@ export default function PocketFundDashboard() {
       }
       return s;
     });
-    await saveSuggestions(newSuggestions);
+    setSuggestions(newSuggestions);
+    await dbUpdateSuggestion(suggestionId, updates);
     showToast('Suggestion updated!');
   };
 
@@ -1803,7 +1528,8 @@ export default function PocketFundDashboard() {
   const handleDeleteSuggestion = async (suggestionId) => {
     if (!confirm('Delete this suggestion permanently?')) return;
     const newSuggestions = suggestions.filter(s => s.id !== suggestionId);
-    await saveSuggestions(newSuggestions);
+    setSuggestions(newSuggestions);
+    await dbDeleteSuggestion(suggestionId);
     showToast('Suggestion deleted');
   };
 
@@ -1821,7 +1547,8 @@ export default function PocketFundDashboard() {
       sixMonthDate: null,
     };
     const newReferrals = [newReferral, ...referrals];
-    await saveReferrals(newReferrals);
+    setReferrals(newReferrals);
+    await dbCreateReferral(newReferral);
     await addActivity({ type: 'referral_submitted', by: currentUser.id });
     // Notify admins only
     const adminIdsForRef = employees.filter(e => e.role === 'admin').map(e => e.id);
@@ -1838,7 +1565,8 @@ export default function PocketFundDashboard() {
       }
       return r;
     });
-    await saveReferrals(newReferrals);
+    setReferrals(newReferrals);
+    await dbUpdateReferral(referralId, { ...updates, updatedAt: Date.now() });
     // Notify the employee who submitted the referral
     if (referral) {
       const statusMsg = updates.status ? `Status updated to: ${updates.status}` : 'Referral updated';
@@ -1850,29 +1578,42 @@ export default function PocketFundDashboard() {
   const handleDeleteReferral = async (referralId) => {
     if (!confirm('Delete this referral permanently?')) return;
     const newReferrals = referrals.filter(r => r.id !== referralId);
-    await saveReferrals(newReferrals);
+    setReferrals(newReferrals);
+    await dbDeleteReferral(referralId);
     showToast('Referral deleted');
   };
 
   // Reset all data
   const handleResetData = async () => {
-    if (confirm('Are you sure you want to reset all data? This cannot be undone.')) {
-      const initialTickets = createInitialTickets();
-      const initialLeaves = createInitialLeaves();
-      const initialActivities = createInitialActivities();
-      await saveTickets(initialTickets);
-      await saveLeaves(initialLeaves);
-      await saveActivities(initialActivities);
-      await saveEmployees(INITIAL_EMPLOYEES);
-      await saveAnnouncements([]);
-      await saveNotifications([]);
-      await saveSalaryRecords([]);
-      await saveSuggestions([]);
-      await saveReferrals([]);
-      // Log out since employee records are reset
+    if (confirm('Are you sure you want to reset all data? This cannot be undone. Note: employee records are preserved in Supabase — only tickets, leaves, and other activity data will be cleared.')) {
+      // Clear all non-employee tables via Supabase
+      await supabase.from('ticket_comments').delete().neq('id', 0);
+      await supabase.from('tickets').delete().neq('id', '');
+      await supabase.from('leaves').delete().neq('id', '');
+      await supabase.from('activities').delete().neq('id', '');
+      await supabase.from('announcements').delete().neq('id', '');
+      await supabase.from('notifications').delete().neq('id', '');
+      await supabase.from('salary_records').delete().neq('month', '');
+      await supabase.from('suggestions').delete().neq('id', '');
+      await supabase.from('referrals').delete().neq('id', '');
+      await supabase.from('holiday_selections').delete().neq('id', '');
+      // Reset local state
+      setTickets([]);
+      setLeaves([]);
+      setActivities([]);
+      setAnnouncements([]);
+      setNotifications([]);
+      setSalaryRecords([]);
+      setSuggestions([]);
+      setReferrals([]);
+      setHolidaySelections([]);
+      // Re-fetch employees from DB (they stay intact)
+      const freshEmps = await dbFetchEmployees();
+      setEmployees(freshEmps);
+      // Log out
       setCurrentUser(null);
-      try { await storage.delete('pocketfund-currentuser'); } catch(e) {}
-      showToast('Data reset to initial state', 'info');
+      clearCurrentUser();
+      showToast('Data reset (employees preserved)', 'info');
     }
   };
 
