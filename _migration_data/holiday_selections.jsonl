@@ -1,0 +1,11 @@
+{"id":"HOL-MLHMXBJ0","employeeId":"EMP-008","holidayId":"OH-4","name":"Janmashtami","date":"2026-08-22","type":"optional","selectedAt":1770790470300}
+{"id":"HOL-MLHMX9NM","employeeId":"EMP-008","holidayId":"OH-5","name":"Ganesh Chaturthi","date":"2026-09-15","type":"optional","selectedAt":1770790467874}
+{"id":"HOL-MLHMX4M6","employeeId":"EMP-008","holidayId":"OH-3","name":"Raksha Bandhan","date":"2026-08-19","type":"optional","selectedAt":1770790461342}
+{"id":"HOL-MLHMWW1Z","employeeId":"EMP-008","holidayId":"OH-2","name":"Gudi Padwa","date":"2026-03-20","type":"optional","selectedAt":1770790450247}
+{"id":"HOL-MLHMWUVJ","employeeId":"EMP-008","holidayId":"OH-1","name":"Eid al-Fitr","date":"2026-03-20","type":"optional","selectedAt":1770790448719}
+{"id":"CHOL-MLGNWNBL","employeeId":"EMP-005","name":"Mahashivratri","date":"2026-02-16","type":"custom","reason":"","selectedAt":1770731652369}
+{"id":"HOL-MLGLHM7X","employeeId":"EMP-015","holidayId":"OH-9","name":"Diwali Holiday (Day 2)","date":"2026-11-10","type":"optional","selectedAt":1770727591869}
+{"id":"HOL-MLGLHJ05","employeeId":"EMP-015","holidayId":"OH-8","name":"Diwali Holiday (Day 1)","date":"2026-11-09","type":"optional","selectedAt":1770727587701}
+{"id":"HOL-MLGLHGQ9","employeeId":"EMP-015","holidayId":"OH-5","name":"Ganesh Chaturthi","date":"2026-09-15","type":"optional","reason":"","selectedAt":1770727584753}
+{"id":"HOL-MLGLHEJN","employeeId":"EMP-015","holidayId":"OH-3","name":"Raksha Bandhan","date":"2026-08-19","type":"optional","reason":"","selectedAt":1770727581923}
+{"id":"HOL-MLGLHCY0","employeeId":"EMP-015","holidayId":"OH-2","name":"Gudi Padwa","date":"2026-03-20","type":"optional","reason":"","selectedAt":1770727579849}

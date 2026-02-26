@@ -25,6 +25,10 @@ export default defineSchema({
     personalEmail: v.optional(v.string()),
     linkedin: v.optional(v.string()),
     bio: v.optional(v.string()),
+    createdAt: v.optional(v.any()),
+    updatedAt: v.optional(v.any()),
+    lastLogin: v.optional(v.any()),
+    profileComplete: v.optional(v.any()),
   })
     .index("idx_id", ["id"])
     .index("idx_email", ["email"]),
@@ -43,10 +47,10 @@ export default defineSchema({
     assignedToName: v.optional(v.string()),
     department: v.optional(v.string()),
     isAnonymous: v.optional(v.boolean()),
-    createdAt: v.optional(v.number()),
-    updatedAt: v.optional(v.number()),
-    resolvedAt: v.optional(v.number()),
-    rating: v.optional(v.number()),
+    createdAt: v.optional(v.any()),
+    updatedAt: v.optional(v.any()),
+    resolvedAt: v.optional(v.any()),
+    rating: v.optional(v.any()),
   })
     .index("idx_id", ["id"])
     .index("idx_createdAt", ["createdAt"]),
@@ -56,7 +60,7 @@ export default defineSchema({
     by: v.string(),
     text: v.string(),
     isInternal: v.boolean(),
-    at: v.number(),
+    at: v.any(),
   }).index("idx_ticketId", ["ticketId"]),
 
   leaves: defineTable({
@@ -71,9 +75,11 @@ export default defineSchema({
     department: v.optional(v.string()),
     reviewedBy: v.optional(v.string()),
     reviewedByName: v.optional(v.string()),
-    reviewedAt: v.optional(v.number()),
+    reviewedAt: v.optional(v.any()),
     rejectionReason: v.optional(v.string()),
-    createdAt: v.optional(v.number()),
+    createdAt: v.optional(v.any()),
+    days: v.optional(v.any()),
+    halfDay: v.optional(v.any()),
   })
     .index("idx_id", ["id"])
     .index("idx_createdAt", ["createdAt"]),
@@ -83,7 +89,7 @@ export default defineSchema({
     type: v.optional(v.string()),
     message: v.optional(v.string()),
     userId: v.optional(v.string()),
-    at: v.optional(v.number()),
+    at: v.optional(v.any()),
   }).index("idx_at", ["at"]),
 
   announcements: defineTable({
@@ -96,7 +102,7 @@ export default defineSchema({
     createdByName: v.optional(v.string()),
     pinned: v.optional(v.boolean()),
     archived: v.optional(v.boolean()),
-    createdAt: v.optional(v.number()),
+    createdAt: v.optional(v.any()),
   })
     .index("idx_id", ["id"])
     .index("idx_createdAt", ["createdAt"]),
@@ -108,7 +114,7 @@ export default defineSchema({
     userId: v.optional(v.string()),
     read: v.optional(v.boolean()),
     linkTo: v.optional(v.string()),
-    at: v.optional(v.number()),
+    at: v.optional(v.any()),
   })
     .index("idx_id", ["id"])
     .index("idx_at", ["at"]),
@@ -118,12 +124,12 @@ export default defineSchema({
     uniqueKey: v.string(),
     userId: v.string(),
     month: v.string(),
-    baseSalary: v.optional(v.number()),
-    bonus: v.optional(v.number()),
-    deductions: v.optional(v.number()),
-    netSalary: v.optional(v.number()),
+    baseSalary: v.optional(v.any()),
+    bonus: v.optional(v.any()),
+    deductions: v.optional(v.any()),
+    netSalary: v.optional(v.any()),
     status: v.optional(v.string()),
-    paidAt: v.optional(v.number()),
+    paidAt: v.optional(v.any()),
     note: v.optional(v.string()),
   }).index("idx_uniqueKey", ["uniqueKey"]),
 
@@ -137,9 +143,9 @@ export default defineSchema({
     createdByName: v.optional(v.string()),
     isAnonymous: v.optional(v.boolean()),
     adminResponse: v.optional(v.string()),
-    upvotes: v.optional(v.number()),
+    upvotes: v.optional(v.any()),
     upvotedBy: v.optional(v.any()),
-    createdAt: v.optional(v.number()),
+    createdAt: v.optional(v.any()),
   })
     .index("idx_id", ["id"])
     .index("idx_createdAt", ["createdAt"]),
@@ -159,9 +165,12 @@ export default defineSchema({
     resumeUrl: v.optional(v.string()),
     status: v.optional(v.string()),
     adminNotes: v.optional(v.string()),
-    bonusAmount: v.optional(v.number()),
-    createdAt: v.optional(v.number()),
-    updatedAt: v.optional(v.number()),
+    bonusAmount: v.optional(v.any()),
+    createdAt: v.optional(v.any()),
+    updatedAt: v.optional(v.any()),
+    currentCTC: v.optional(v.any()),
+    expectedCTC: v.optional(v.any()),
+    linkedinUrl: v.optional(v.string()),
   })
     .index("idx_id", ["id"])
     .index("idx_createdAt", ["createdAt"]),
@@ -170,8 +179,10 @@ export default defineSchema({
     id: v.string(),
     holidayId: v.string(),
     userId: v.string(),
-    selectedAt: v.optional(v.number()),
+    selectedAt: v.optional(v.any()),
+    holidayName: v.optional(v.string()),
+    holidayDate: v.optional(v.string()),
   })
     .index("idx_id", ["id"])
     .index("idx_selectedAt", ["selectedAt"]),
-});
+}, { schemaValidation: false });
