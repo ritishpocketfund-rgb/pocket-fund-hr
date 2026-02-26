@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { Bell, Search, Plus, Filter, Clock, AlertCircle, CheckCircle2, MessageSquare, Calendar, Users, TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Send, X, ChevronDown, LogOut, User, Settings, Paperclip, Eye, EyeOff, RefreshCw, Trash2, Edit3, Check, AlertTriangle, Home, FileText, BarChart3, UserCheck, Mail, Lock, Megaphone, BellRing, Pin, Archive, Volume2, VolumeX, Moon, Sun, Palette, Shield, ChevronRight, Star, Globe, Briefcase, Wallet, IndianRupee, CircleDot, Wifi, WifiOff, Sparkles, Bot, MessageCircle, Phone, MapPin, Building, CreditCard, Heart, Camera, ChevronLeft, Upload, Image, Coffee } from 'lucide-react';
 import {
-  supabase,
   fetchEmployees as dbFetchEmployees,
   upsertEmployee, deleteEmployee as dbDeleteEmployee,
   fetchTickets as dbFetchTickets,
@@ -21,7 +20,8 @@ import {
   createReferral as dbCreateReferral, updateReferral as dbUpdateReferral, deleteReferral as dbDeleteReferral,
   fetchHolidaySelections as dbFetchHolidaySelections, replaceHolidaySelections,
   getCurrentUser, setCurrentUser as dbSetCurrentUser, clearCurrentUser,
-} from './lib/supabase';
+  resetAllData,
+} from './lib/convex';
 
 // ============ UTILITY FUNCTIONS ============
 const generateId = (prefix) => `${prefix}-${Date.now().toString(36).toUpperCase()}`;
