@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { Bell, Search, Plus, Filter, Clock, AlertCircle, CheckCircle2, MessageSquare, Calendar, Users, TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Send, X, ChevronDown, LogOut, User, Settings, Paperclip, Eye, EyeOff, RefreshCw, Trash2, Edit3, Check, AlertTriangle, Home, FileText, BarChart3, UserCheck, Mail, Lock, Megaphone, BellRing, Pin, Archive, Volume2, VolumeX, Moon, Sun, Palette, Shield, ChevronRight, Star, Globe, Briefcase, Wallet, IndianRupee, CircleDot, Wifi, WifiOff, Sparkles, Bot, MessageCircle, Phone, MapPin, Building, CreditCard, Heart, Camera, ChevronLeft, Upload, Image, Coffee } from 'lucide-react';
+import { Bell, Search, Plus, Filter, Clock, AlertCircle, CheckCircle2, MessageSquare, Calendar, Users, TrendingUp, ArrowUpRight, ArrowDownRight, MoreHorizontal, Send, X, ChevronDown, LogOut, User, Settings, Paperclip, Eye, EyeOff, RefreshCw, Trash2, Edit3, Check, AlertTriangle, Home, FileText, BarChart3, UserCheck, Mail, Lock, Megaphone, BellRing, Pin, Archive, Volume2, VolumeX, Moon, Sun, Palette, Shield, ChevronRight, Star, Globe, Briefcase, Wallet, IndianRupee, CircleDot, Wifi, WifiOff, Sparkles, Bot, MessageCircle, Phone, MapPin, Building, CreditCard, Heart, Camera, ChevronLeft, Upload, Image, Coffee, Download } from 'lucide-react';
 import {
   fetchEmployees as dbFetchEmployees,
   upsertEmployee, deleteEmployee as dbDeleteEmployee,
@@ -956,6 +956,9 @@ export default function PocketFundDashboard() {
   const [showNewReferralModal, setShowNewReferralModal] = useState(false);
   const [showCalendarPopup, setShowCalendarPopup] = useState(false);
   const [viewingEmployee, setViewingEmployee] = useState(null);
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState('all');
+  const [leaveMonthFilter, setLeaveMonthFilter] = useState('all');
+  const [showLeaveReport, setShowLeaveReport] = useState(false);
 
   // Load data from Supabase tables
   useEffect(() => {
@@ -1652,8 +1655,65 @@ export default function PocketFundDashboard() {
     if (currentUser?.role === 'employee') {
       result = result.filter(l => l.employeeId === currentUser.id);
     }
+    // Status filter
+    if (leaveStatusFilter !== 'all') {
+      result = result.filter(l => l.status === leaveStatusFilter);
+    }
+    // Month filter
+    if (leaveMonthFilter !== 'all') {
+      const [filterYear, filterMonth] = leaveMonthFilter.split('-').map(Number);
+      result = result.filter(l => {
+        const d = new Date(l.startDate);
+        return d.getFullYear() === filterYear && d.getMonth() === filterMonth;
+      });
+    }
     return result.sort((a, b) => b.createdAt - a.createdAt);
-  }, [leaves, currentUser]);
+  }, [leaves, currentUser, leaveStatusFilter, leaveMonthFilter]);
+
+  // Available months for the month filter dropdown
+  const leaveMonths = useMemo(() => {
+    const monthSet = new Set();
+    leaves.forEach(l => {
+      const d = new Date(l.startDate);
+      monthSet.add(`${d.getFullYear()}-${d.getMonth()}`);
+    });
+    return Array.from(monthSet).sort((a, b) => b.localeCompare(a)).map(key => {
+      const [y, m] = key.split('-').map(Number);
+      const label = new Date(y, m).toLocaleString('default', { month: 'long', year: 'numeric' });
+      return { value: key, label };
+    });
+  }, [leaves]);
+
+  // Monthly leave report data (admin)
+  const monthlyLeaveReport = useMemo(() => {
+    if (currentUser?.role !== 'admin') return [];
+    let reportLeaves = leaves.filter(l => l.status === 'Approved');
+    if (leaveMonthFilter !== 'all') {
+      const [fy, fm] = leaveMonthFilter.split('-').map(Number);
+      reportLeaves = reportLeaves.filter(l => {
+        const d = new Date(l.startDate);
+        return d.getFullYear() === fy && d.getMonth() === fm;
+      });
+    } else {
+      // Default to current month
+      const now = new Date();
+      reportLeaves = reportLeaves.filter(l => {
+        const d = new Date(l.startDate);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      });
+    }
+    const byEmployee = {};
+    reportLeaves.forEach(l => {
+      if (!byEmployee[l.employeeId]) byEmployee[l.employeeId] = { totalDays: 0, types: {} };
+      byEmployee[l.employeeId].totalDays += l.days || 1;
+      const t = l.type || 'Other';
+      byEmployee[l.employeeId].types[t] = (byEmployee[l.employeeId].types[t] || 0) + (l.days || 1);
+    });
+    return Object.entries(byEmployee).map(([empId, data]) => {
+      const emp = employees.find(e => e.id === empId);
+      return { empId, name: emp?.name || 'Unknown', dept: emp?.dept || '', totalDays: data.totalDays, types: data.types };
+    }).sort((a, b) => b.totalDays - a.totalDays);
+  }, [leaves, employees, currentUser, leaveMonthFilter]);
 
   const stats = useMemo(() => {
     const now = Date.now();
@@ -2475,29 +2535,181 @@ export default function PocketFundDashboard() {
 
           {/* Leaves Tab */}
           {activeTab === 'leaves' && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between p-5 border-b border-slate-100">
-                  <h3 className="font-bold text-slate-900">
-                    {isAdmin ? 'Leave Requests' : 'My Leave Requests'}
-                  </h3>
+            <div className="space-y-6">
+              {/* Filter Bar */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Status Filter Tabs */}
+                  <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1">
+                    {[
+                      { value: 'all', label: 'All' },
+                      { value: 'Pending', label: 'Pending', color: 'amber' },
+                      { value: 'Approved', label: 'Approved', color: 'emerald' },
+                      { value: 'Rejected', label: 'Rejected', color: 'red' },
+                    ].map(tab => (
+                      <button
+                        key={tab.value}
+                        onClick={() => setLeaveStatusFilter(tab.value)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          leaveStatusFilter === tab.value
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {tab.label}
+                        {tab.value !== 'all' && (
+                          <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] ${
+                            leaveStatusFilter === tab.value ? 'bg-slate-100' : 'bg-slate-200/60'
+                          }`}>
+                            {leaves.filter(l => {
+                              let match = l.status === tab.value;
+                              if (currentUser?.role === 'employee') match = match && l.employeeId === currentUser.id;
+                              return match;
+                            }).length}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Month Filter */}
+                  <select
+                    value={leaveMonthFilter}
+                    onChange={e => setLeaveMonthFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  >
+                    <option value="all">All Months</option>
+                    {leaveMonths.map(m => (
+                      <option key={m.value} value={m.value}>{m.label}</option>
+                    ))}
+                  </select>
+
+                  <div className="flex-1" />
+
+                  {/* Monthly Report Button (Admin) */}
+                  {isAdmin && (
+                    <button
+                      onClick={() => setShowLeaveReport(!showLeaveReport)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                        showLeaveReport ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 hover:bg-violet-100'
+                      }`}
+                    >
+                      <BarChart3 size={14} />
+                      Monthly Report
+                    </button>
+                  )}
+
                   {!isAdmin && (
                     <button
                       onClick={() => setShowNewLeaveModal(true)}
-                      className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 transition-colors"
+                      className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-xs font-semibold hover:bg-violet-700 transition-colors"
                     >
                       <Plus size={16} />
                       Apply Leave
                     </button>
                   )}
                 </div>
+              </div>
+
+              {/* Monthly Leave Report (Admin) */}
+              {isAdmin && showLeaveReport && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                    <div>
+                      <h3 className="font-bold text-slate-900">Monthly Leave Report</h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {leaveMonthFilter !== 'all'
+                          ? leaveMonths.find(m => m.value === leaveMonthFilter)?.label
+                          : new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
+                        {' · '} Approved leaves only
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const header = 'Name,Department,Personal,Sick,Exam,Emergency,Unpaid,Total Days\n';
+                        const rows = monthlyLeaveReport.map(r =>
+                          `"${r.name}","${r.dept}",${r.types['Personal Leave']||0},${r.types['Sick Leave']||0},${r.types['Exam Leave']||0},${r.types['Emergency Leave']||0},${r.types['Unpaid Leave']||0},${r.totalDays}`
+                        ).join('\n');
+                        const blob = new Blob([header + rows], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `leave-report-${leaveMonthFilter !== 'all' ? leaveMonthFilter : 'current'}.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold hover:bg-emerald-100 transition-colors"
+                    >
+                      <Download size={13} />
+                      Export CSV
+                    </button>
+                  </div>
+                  {monthlyLeaveReport.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-slate-400">No approved leaves for this period.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 text-left">
+                            <th className="px-5 py-3 font-semibold text-slate-600 text-xs">Employee</th>
+                            <th className="px-3 py-3 font-semibold text-slate-600 text-xs text-center">Personal</th>
+                            <th className="px-3 py-3 font-semibold text-slate-600 text-xs text-center">Sick</th>
+                            <th className="px-3 py-3 font-semibold text-slate-600 text-xs text-center">Exam</th>
+                            <th className="px-3 py-3 font-semibold text-slate-600 text-xs text-center">Emergency</th>
+                            <th className="px-3 py-3 font-semibold text-slate-600 text-xs text-center">Unpaid</th>
+                            <th className="px-3 py-3 font-semibold text-slate-600 text-xs text-center">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {monthlyLeaveReport.map(row => (
+                            <tr key={row.empId} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-5 py-3">
+                                <p className="font-medium text-slate-900">{row.name}</p>
+                                <p className="text-xs text-slate-400">{row.dept}</p>
+                              </td>
+                              <td className="px-3 py-3 text-center text-slate-700">{row.types['Personal Leave'] || '—'}</td>
+                              <td className="px-3 py-3 text-center text-slate-700">{row.types['Sick Leave'] || '—'}</td>
+                              <td className="px-3 py-3 text-center text-slate-700">{row.types['Exam Leave'] || '—'}</td>
+                              <td className="px-3 py-3 text-center text-slate-700">{row.types['Emergency Leave'] || '—'}</td>
+                              <td className="px-3 py-3 text-center text-slate-700">{row.types['Unpaid Leave'] || '—'}</td>
+                              <td className="px-3 py-3 text-center font-bold text-violet-700">{row.totalDays}</td>
+                            </tr>
+                          ))}
+                          <tr className="bg-violet-50 font-semibold">
+                            <td className="px-5 py-3 text-violet-900">Total</td>
+                            <td className="px-3 py-3 text-center text-violet-700">{monthlyLeaveReport.reduce((s,r) => s+(r.types['Personal Leave']||0), 0) || '—'}</td>
+                            <td className="px-3 py-3 text-center text-violet-700">{monthlyLeaveReport.reduce((s,r) => s+(r.types['Sick Leave']||0), 0) || '—'}</td>
+                            <td className="px-3 py-3 text-center text-violet-700">{monthlyLeaveReport.reduce((s,r) => s+(r.types['Exam Leave']||0), 0) || '—'}</td>
+                            <td className="px-3 py-3 text-center text-violet-700">{monthlyLeaveReport.reduce((s,r) => s+(r.types['Emergency Leave']||0), 0) || '—'}</td>
+                            <td className="px-3 py-3 text-center text-violet-700">{monthlyLeaveReport.reduce((s,r) => s+(r.types['Unpaid Leave']||0), 0) || '—'}</td>
+                            <td className="px-3 py-3 text-center font-bold text-violet-900">{monthlyLeaveReport.reduce((s,r) => s+r.totalDays, 0)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                  <h3 className="font-bold text-slate-900">
+                    {isAdmin ? 'Leave Requests' : 'My Leave Requests'}
+                    <span className="ml-2 text-xs font-normal text-slate-400">({filteredLeaves.length})</span>
+                  </h3>
+                </div>
 
                 {filteredLeaves.length === 0 ? (
                   <EmptyState
                     icon={Calendar}
                     title="No leave requests"
-                    description={currentUser.role === 'employee' ? "You haven't applied for any leave yet." : "No leave requests in the system."}
-                    action={!isAdmin && (
+                    description={
+                      leaveStatusFilter !== 'all' || leaveMonthFilter !== 'all'
+                        ? "No leaves match your current filters."
+                        : currentUser.role === 'employee' ? "You haven't applied for any leave yet." : "No leave requests in the system."
+                    }
+                    action={!isAdmin && leaveStatusFilter === 'all' && leaveMonthFilter === 'all' && (
                       <button
                         onClick={() => setShowNewLeaveModal(true)}
                         className="px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 transition-colors"
@@ -2613,8 +2825,8 @@ export default function PocketFundDashboard() {
                       { type: 'Unpaid Leave', key: 'unpaid', desc: 'No restrictions — apply as needed', hasBalance: false, badge: 'No limit' },
                     ].map(item => {
                       const balance = currentUser.leaveBalance?.[item.key] || 0;
-                      const used = filteredLeaves.filter(l => 
-                        l.type === item.type && l.status === 'Approved'
+                      const used = leaves.filter(l => 
+                        l.employeeId === currentUser.id && l.type === item.type && l.status === 'Approved'
                       ).reduce((sum, l) => sum + l.days, 0);
                       
                       return (
@@ -2647,21 +2859,25 @@ export default function PocketFundDashboard() {
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
                   <h3 className="font-bold text-slate-900 mb-4">Leave Overview</h3>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 bg-orange-50 rounded-xl">
+                    <button onClick={() => setLeaveStatusFilter('Pending')} className="w-full flex items-center justify-between p-3 bg-orange-50 rounded-xl hover:bg-orange-100 transition-colors">
                       <span className="text-sm text-orange-700">Pending</span>
                       <span className="text-lg font-bold text-orange-700">{leaves.filter(l => l.status === 'Pending').length}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl">
-                      <span className="text-sm text-emerald-700">Approved (This Month)</span>
+                    </button>
+                    <button onClick={() => setLeaveStatusFilter('Approved')} className="w-full flex items-center justify-between p-3 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors">
+                      <span className="text-sm text-emerald-700">Approved</span>
                       <span className="text-lg font-bold text-emerald-700">{leaves.filter(l => l.status === 'Approved').length}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl">
+                    </button>
+                    <button onClick={() => setLeaveStatusFilter('Rejected')} className="w-full flex items-center justify-between p-3 bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
                       <span className="text-sm text-red-600">Rejected</span>
                       <span className="text-lg font-bold text-red-600">{leaves.filter(l => l.status === 'Rejected').length}</span>
-                    </div>
+                    </button>
+                    <button onClick={() => setLeaveStatusFilter('all')} className="w-full text-center text-xs text-slate-400 hover:text-slate-600 py-1">
+                      Clear filter
+                    </button>
                   </div>
                 </div>
               )}
+              </div>
             </div>
           )}
 
