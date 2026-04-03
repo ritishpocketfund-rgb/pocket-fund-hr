@@ -978,7 +978,14 @@ export default function PocketFundDashboard() {
         ]);
         setEmployees(emps);
         setTickets(tkts);
-        setLeaves(lvs);
+        // Filter out leaves older than 2 months to keep storage lean
+        const twoMonthsAgo = Date.now() - (60 * 24 * 60 * 60 * 1000);
+        const recentLeaves = lvs.filter(l => {
+          const created = l.createdAt || 0;
+          const start = l.startDate ? new Date(l.startDate).getTime() : 0;
+          return Math.max(created, start) > twoMonthsAgo;
+        });
+        setLeaves(recentLeaves);
         setActivities(acts);
         setAnnouncements(anns);
         setNotifications(ntfs);
@@ -1017,7 +1024,14 @@ export default function PocketFundDashboard() {
       ]);
       setEmployees(emps);
       setTickets(tkts);
-      setLeaves(lvs);
+      // Filter out leaves older than 2 months
+      const twoMonthsAgo = Date.now() - (60 * 24 * 60 * 60 * 1000);
+      const recentLeaves = lvs.filter(l => {
+        const created = l.createdAt || 0;
+        const start = l.startDate ? new Date(l.startDate).getTime() : 0;
+        return Math.max(created, start) > twoMonthsAgo;
+      });
+      setLeaves(recentLeaves);
       setActivities(acts);
       setAnnouncements(anns);
       setNotifications(ntfs);
@@ -2564,6 +2578,11 @@ export default function PocketFundDashboard() {
                             {leaves.filter(l => {
                               let match = l.status === tab.value;
                               if (currentUser?.role === 'employee') match = match && l.employeeId === currentUser.id;
+                              if (match && leaveMonthFilter !== 'all') {
+                                const [fy, fm] = leaveMonthFilter.split('-').map(Number);
+                                const d = new Date(l.startDate);
+                                match = match && d.getFullYear() === fy && d.getMonth() === fm;
+                              }
                               return match;
                             }).length}
                           </span>
